@@ -1,0 +1,14 @@
+### examples/m8mulprc-config.yaml
+```yaml
+# Sample configuration for M8MulPrc plugin
+# MIT License - Copyright (c) 2025 laplaque/instana_plugins Contributors
+#
+# Add this to your Instana agent configuration.yaml file
+
+com.instana.plugin.python:
+  enabled: true
+  custom_sensors:
+    - id: microstrategy_m8mulprc
+      path: /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
+      interval: 30000  # Run every 30 seconds (adjust as needed)
+
