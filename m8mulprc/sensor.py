@@ -153,7 +153,7 @@ def report_metrics():
     
     # Format output for Instana
     output = {
-        "name": "com.custom.microstrategy.m8mulprc",
+        "name": "com.instana.plugin.python.microstrategy_m8mulprc",
         "entityId": f"{PROCESS_NAME.lower()}-" + os.uname()[1],  # Hostname as part of entity ID
         "timestamp": int(datetime.now().timestamp() * 1000),
         "metrics": metrics
