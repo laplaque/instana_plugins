@@ -1,6 +1,6 @@
 {
   "__license": "MIT License, Copyright (c) 2025 laplaque/instana_plugins Contributors",
-  "name": "com.custom.microstrategy.m8mulprc",
+  "name": "com.instana.plugin.python.microstrategy_m8mulprc",
   "version": "1.0.0",
   "type": "custom",
   "entity": {

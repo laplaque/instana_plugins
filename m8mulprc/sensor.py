@@ -42,7 +42,8 @@ def get_process_metrics():
     
     for process in m8mulprc_processes:
         parts = process.split()
-        if len(parts) >= 3:
+        if len(parts) < 4:
+            continue
             try:
                 pid = parts[0]
                 process_pids.append(pid)
@@ -66,8 +67,8 @@ def get_process_metrics():
                 vol_ctx, nonvol_ctx = get_context_switches(pid)
                 total_voluntary_ctx_switches += vol_ctx
                 total_nonvoluntary_ctx_switches += nonvol_ctx
-            except ValueError as e:
-                pass
+            except Exception as e:
+                continue
     
     return {
         "cpu_usage": total_cpu,
@@ -158,7 +159,7 @@ def report_metrics():
         "metrics": metrics
     }
     
-    print(json.dumps(output))
+    print(json.dumps(output), flush=True)
 
 if __name__ == "__main__":
     report_metrics()
