@@ -76,7 +76,7 @@ function create_plugin_json {
     cat > "${INSTALL_DIR}/plugin.json" << 'EOF'
 {
   "__license": "MIT License, Copyright (c) 2025 laplaque/instana_plugins Contributors",
-  "name": "com.custom.microstrategy.mstrsvr",
+  "name": "com.instana.plugin.python.microstrategy_mstrsvr",
   "version": "1.0.0",
   "type": "custom",
   "entity": {
@@ -284,7 +284,7 @@ def report_metrics():
     
     # Format output for Instana
     output = {
-        "name": "com.custom.microstrategy.mstrsvr",
+        "name": "com.instana.plugin.python.microstrategy_mstrsvr",
         "entityId": f"{PROCESS_NAME.lower()}-" + os.uname()[1],  # Hostname as part of entity ID
         "timestamp": int(datetime.now().timestamp() * 1000),
         "metrics": metrics

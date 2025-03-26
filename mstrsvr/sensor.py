@@ -42,7 +42,8 @@ def get_process_metrics():
     
     for process in mstrsvr_processes:
         parts = process.split()
-        if len(parts) >= 3:
+        if len(parts) < 4:
+            continue
             try:
                 pid = parts[0]
                 process_pids.append(pid)
@@ -67,7 +68,7 @@ def get_process_metrics():
                 total_voluntary_ctx_switches += vol_ctx
                 total_nonvoluntary_ctx_switches += nonvol_ctx
             except ValueError as e:
-                pass
+                continue
     
     return {
         "cpu_usage": total_cpu,
@@ -99,7 +100,7 @@ def get_disk_io_for_pid(pid):
                 write_bytes = int(line.split(":")[1].strip())
         
         return read_bytes, write_bytes
-    except Exception:
+    except Exception as e:
         return 0, 0
 
 def get_file_descriptor_count(pid):
@@ -110,7 +111,7 @@ def get_file_descriptor_count(pid):
         if os.path.exists(fd_dir):
             return len(os.listdir(fd_dir))
         return 0
-    except Exception:
+    except Exception as e:
         return 0
 
 def get_thread_count(pid):
@@ -128,7 +129,7 @@ def get_thread_count(pid):
             if thread_match:
                 return int(thread_match.group(1))
         return 0
-    except Exception:
+    except Exception as e:
         return 0
 
 def get_context_switches(pid):
@@ -144,7 +145,7 @@ def get_context_switches(pid):
             nonvol_ctx = int(nonvol_match.group(1)) if nonvol_match else 0
             
             return vol_ctx, nonvol_ctx
-    except Exception:
+    except Exception as e:
         return 0, 0
 
 def report_metrics():
@@ -152,13 +153,13 @@ def report_metrics():
     
     # Format output for Instana
     output = {
-        "name": "com.custom.microstrategy.mstrsvr",
+        "name": "com.instana.plugin.python.microstrategy_mstrsvr",
         "entityId": f"{PROCESS_NAME.lower()}-" + os.uname()[1],  # Hostname as part of entity ID
         "timestamp": int(datetime.now().timestamp() * 1000),
         "metrics": metrics
     }
     
-    print(json.dumps(output))
+    print(json.dumps(output), flush=True)
 
 if __name__ == "__main__":
     report_metrics()

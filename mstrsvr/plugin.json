@@ -1,6 +1,6 @@
 {
   "__license": "MIT License, Copyright (c) 2025 laplaque/instana_plugins Contributors",
-  "name": "com.custom.microstrategy.mstrsvr",
+  "name": "com.instana.plugin.python.microstrategy_mstrsvr",
   "version": "1.0.0",
   "type": "custom",
   "entity": {
