@@ -30,3 +30,5 @@ var/
 .DS_Store
 Thumbs.db
 
+# Other files
+*scratchpad*
