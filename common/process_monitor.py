@@ -11,8 +11,6 @@ import os
 import subprocess
 import json
 import re
-import time
-import argparse
 from datetime import datetime
 
 def get_process_metrics(process_name):
@@ -156,65 +154,22 @@ def get_context_switches(pid):
     except Exception:
         return 0, 0
 
-def report_metrics(process_name, plugin_name, format_output="json", continuous=False, interval=60):
+def report_metrics(process_name, plugin_name):
     """
     Report metrics for the given process to Instana.
     
     Args:
         process_name (str): The name of the process to monitor
         plugin_name (str): The name of the Instana plugin
-        format_output (str): Output format (json or human)
-        continuous (bool): Whether to run continuously
-        interval (int): Interval in seconds between reports when running continuously
     """
-    def _report_once():
-        metrics = get_process_metrics(process_name)
-        
-        # Format output for Instana
-        output_data = {
-            "name": plugin_name,
-            "entityId": f"{process_name.lower()}-" + os.uname()[1],  # Hostname as part of entity ID
-            "timestamp": int(datetime.now().timestamp() * 1000),
-            "metrics": metrics
-        }
-        
-        if format_output == "json":
-            print(json.dumps(output_data), flush=True)
-        else:  # human-readable format
-            print(f"\n=== {process_name} Process Metrics ===")
-            print(f"Timestamp: {datetime.fromtimestamp(output_data['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"Host: {os.uname()[1]}")
-            print(f"Process count: {metrics['process_count']}")
-            if metrics['process_count'] > 0:
-                print(f"PIDs: {metrics['monitored_pids']}")
-                print(f"CPU usage: {metrics['cpu_usage']:.2f}%")
-                print(f"Memory usage: {metrics['memory_usage']:.2f}%")
-                print(f"Open file descriptors: {metrics['open_file_descriptors']}")
-                print(f"Thread count: {metrics['thread_count']}")
-                print(f"Disk read: {metrics['disk_read_bytes']/1024/1024:.2f} MB")
-                print(f"Disk write: {metrics['disk_write_bytes']/1024/1024:.2f} MB")
-                print(f"Voluntary context switches: {metrics['voluntary_ctx_switches']}")
-                print(f"Non-voluntary context switches: {metrics['nonvoluntary_ctx_switches']}")
-            print("=" * 40)
+    metrics = get_process_metrics(process_name)
     
-    if not continuous:
-        _report_once()
-    else:
-        try:
-            while True:
-                _report_once()
-                time.sleep(interval)
-        except KeyboardInterrupt:
-            print("\nMonitoring stopped.")
-
-def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Monitor process metrics for Instana')
-    parser.add_argument('--process', '-p', help='Process name to monitor (overrides default)')
-    parser.add_argument('--format', '-f', choices=['json', 'human'], default='json',
-                        help='Output format (json or human-readable)')
-    parser.add_argument('--continuous', '-c', action='store_true',
-                        help='Run continuously instead of once')
-    parser.add_argument('--interval', '-i', type=int, default=60,
-                        help='Interval in seconds between reports when running continuously (default: 60)')
-    return parser.parse_args()
+    # Format output for Instana
+    output = {
+        "name": plugin_name,
+        "entityId": f"{process_name.lower()}-" + os.uname()[1],  # Hostname as part of entity ID
+        "timestamp": int(datetime.now().timestamp() * 1000),
+        "metrics": metrics
+    }
+    
+    print(json.dumps(output), flush=True)
