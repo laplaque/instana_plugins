@@ -1,0 +1,5 @@
+# OpenTelemetry dependencies
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp>=1.20.0
+opentelemetry-semantic-conventions>=0.41b0
