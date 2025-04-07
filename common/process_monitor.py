@@ -11,7 +11,16 @@ import os
 import subprocess
 import json
 import re
+import logging
 from datetime import datetime
+from typing import Dict, Any, Optional
+
+# Import the OpenTelemetry connector
+from common.otel_connector import InstanaOTelConnector
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_process_metrics(process_name):
     """
@@ -74,6 +83,7 @@ def get_process_metrics(process_name):
             total_voluntary_ctx_switches += vol_ctx
             total_nonvoluntary_ctx_switches += nonvol_ctx
         except Exception:
+            logger.exception(f"Error processing PID {pid}")
             continue
     
     return {
@@ -118,7 +128,7 @@ def get_file_descriptor_count(pid):
             return len(os.listdir(fd_dir))
         return 0
     except Exception:
-        return 0
+        return 0, 0
 
 def get_thread_count(pid):
     """Get the number of threads for a process"""
@@ -154,22 +164,59 @@ def get_context_switches(pid):
     except Exception:
         return 0, 0
 
-def report_metrics(process_name, plugin_name):
+def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port=4317):
     """
-    Report metrics for the given process to Instana.
+    Report metrics for the given process to Instana using OpenTelemetry.
     
     Args:
         process_name (str): The name of the process to monitor
         plugin_name (str): The name of the Instana plugin
+        agent_host (str): Hostname of the Instana agent (default: localhost)
+        agent_port (int): Port of the Instana agent's OTLP receiver (default: 4317)
     """
-    metrics = get_process_metrics(process_name)
-    
-    # Format output for Instana
-    output = {
-        "name": plugin_name,
-        "entityId": f"{process_name.lower()}-" + os.uname()[1],  # Hostname as part of entity ID
-        "timestamp": int(datetime.now().timestamp() * 1000),
-        "metrics": metrics
-    }
-    
-    print(json.dumps(output), flush=True)
+    try:
+        # Create a span to track the metric collection process
+        otel = InstanaOTelConnector(
+            service_name=plugin_name,
+            agent_host=agent_host,
+            agent_port=agent_port,
+            resource_attributes={
+                "process.name": process_name,
+                "host.name": os.uname()[1]
+            }
+        )
+        
+        # Create a span for the metric collection
+        with otel.create_span(
+            name=f"collect_{process_name}_metrics",
+            attributes={"process.name": process_name}
+        ):
+            # Collect metrics
+            metrics = get_process_metrics(process_name)
+            
+            # Record metrics using OpenTelemetry
+            otel.record_metrics(metrics)
+            
+            # For backward compatibility, also print the JSON output
+            output = {
+                "name": plugin_name,
+                "entityId": f"{process_name.lower()}-" + os.uname()[1],
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "metrics": metrics
+            }
+            
+            print(json.dumps(output), flush=True)
+            logger.info(f"Reported metrics for {process_name} using OpenTelemetry")
+            
+    except Exception as e:
+        logger.error(f"Error reporting metrics: {e}")
+        
+        # Fallback to traditional output in case of error
+        metrics = get_process_metrics(process_name)
+        output = {
+            "name": plugin_name,
+            "entityId": f"{process_name.lower()}-" + os.uname()[1],
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "metrics": metrics
+        }
+        print(json.dumps(output), flush=True)
