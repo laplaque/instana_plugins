@@ -23,13 +23,8 @@ def get_process_metrics(process_name):
     Returns:
         dict: A dictionary containing process metrics
     """
-    # Get process information - handle different ps options on macOS vs Linux
-    try:
-        # Try Linux-style options first
-        process_info = subprocess.check_output(["ps", "-eo", "pid,%cpu,%mem,comm", "--sort=-%cpu"]).decode('utf-8')
-    except subprocess.CalledProcessError:
-        # Fall back to macOS-style options
-        process_info = subprocess.check_output(["ps", "-eo", "pid,%cpu,%mem,comm"]).decode('utf-8')
+    # Get process information
+    process_info = subprocess.check_output(["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"]).decode('utf-8')
     
     # Filter for processes (case insensitive)
     process_regex = re.compile(process_name, re.IGNORECASE)
@@ -97,70 +92,48 @@ def get_process_metrics(process_name):
 def get_disk_io_for_pid(pid):
     """Get disk I/O statistics for a specific process ID"""
     try:
-        # On Linux, read from /proc/{pid}/io
-        if os.path.exists(f"/proc/{pid}/io"):
-            with open(f"/proc/{pid}/io", "r") as f:
-                io_content = f.readlines()
-            
-            read_bytes = 0
-            write_bytes = 0
-            
-            for line in io_content:
-                if "read_bytes" in line:
-                    read_bytes = int(line.split(":")[1].strip())
-                elif "write_bytes" in line:
-                    write_bytes = int(line.split(":")[1].strip())
-            
-            return read_bytes, write_bytes
+        # Read current I/O stats
+        with open(f"/proc/{pid}/io", "r") as f:
+            io_content = f.readlines()
         
-        # On macOS, we could use iotop or dtrace, but for simplicity return zeros
-        return 0, 0
+        read_bytes = 0
+        write_bytes = 0
+        
+        for line in io_content:
+            if "read_bytes" in line:
+                read_bytes = int(line.split(":")[1].strip())
+            elif "write_bytes" in line:
+                write_bytes = int(line.split(":")[1].strip())
+        
+        return read_bytes, write_bytes
     except Exception:
         return 0, 0
 
 def get_file_descriptor_count(pid):
     """Get the number of open file descriptors for a process"""
     try:
-        # On Linux, count entries in /proc/{pid}/fd directory
+        # Count entries in /proc/{pid}/fd directory
         fd_dir = f"/proc/{pid}/fd"
         if os.path.exists(fd_dir):
             return len(os.listdir(fd_dir))
-        
-        # On macOS, use lsof to count open files
-        try:
-            output = subprocess.check_output(["lsof", "-p", str(pid)]).decode('utf-8')
-            return len(output.splitlines()) - 1  # Subtract header line
-        except subprocess.CalledProcessError:
-            return 0
+        return 0
     except Exception:
         return 0
 
 def get_thread_count(pid):
     """Get the number of threads for a process"""
     try:
-        # On Linux, count entries in /proc/{pid}/task directory
+        # Count entries in /proc/{pid}/task directory
         task_dir = f"/proc/{pid}/task"
         if os.path.exists(task_dir):
             return len(os.listdir(task_dir))
         
-        # On Linux, alternative method using status file
-        status_file = f"/proc/{pid}/status"
-        if os.path.exists(status_file):
-            with open(status_file, "r") as f:
-                status_content = f.read()
-                thread_match = re.search(r"Threads:\s+(\d+)", status_content)
-                if thread_match:
-                    return int(thread_match.group(1))
-        
-        # On macOS, use ps to get thread count
-        try:
-            output = subprocess.check_output(["ps", "-M", "-p", str(pid)]).decode('utf-8')
-            lines = output.splitlines()
-            if len(lines) > 1:  # Header + at least one line
-                return len(lines) - 1
-        except subprocess.CalledProcessError:
-            pass
-        
+        # Alternative method using status file
+        with open(f"/proc/{pid}/status", "r") as f:
+            status_content = f.read()
+            thread_match = re.search(r"Threads:\s+(\d+)", status_content)
+            if thread_match:
+                return int(thread_match.group(1))
         return 0
     except Exception:
         return 0
@@ -168,23 +141,16 @@ def get_thread_count(pid):
 def get_context_switches(pid):
     """Get voluntary and non-voluntary context switches for a process"""
     try:
-        # On Linux, read from /proc/{pid}/status
-        status_file = f"/proc/{pid}/status"
-        if os.path.exists(status_file):
-            with open(status_file, "r") as f:
-                status_content = f.read()
-                
-                vol_match = re.search(r"voluntary_ctxt_switches:\s+(\d+)", status_content)
-                nonvol_match = re.search(r"nonvoluntary_ctxt_switches:\s+(\d+)", status_content)
-                
-                vol_ctx = int(vol_match.group(1)) if vol_match else 0
-                nonvol_ctx = int(nonvol_match.group(1)) if nonvol_match else 0
-                
-                return vol_ctx, nonvol_ctx
-        
-        # On macOS, this information is not easily accessible
-        # We could use DTrace, but for simplicity return zeros
-        return 0, 0
+        with open(f"/proc/{pid}/status", "r") as f:
+            status_content = f.read()
+            
+            vol_match = re.search(r"voluntary_ctxt_switches:\s+(\d+)", status_content)
+            nonvol_match = re.search(r"nonvoluntary_ctxt_switches:\s+(\d+)", status_content)
+            
+            vol_ctx = int(vol_match.group(1)) if vol_match else 0
+            nonvol_ctx = int(nonvol_match.group(1)) if nonvol_match else 0
+            
+            return vol_ctx, nonvol_ctx
     except Exception:
         return 0, 0
 
