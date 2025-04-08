@@ -1,6 +1,7 @@
 # Instana Plugins Collection
 
 A collection of custom plugins for Instana monitoring of MicroStrategy processes.
+A collection of custom plugins for Instana monitoring of MicroStrategy processes.
 
 ## Available Plugins
 
@@ -118,6 +119,57 @@ The plugins use a common framework for process monitoring and OpenTelemetry inte
 
 Each plugin implements a sensor that uses these common components to monitor specific MicroStrategy processes.
 
+### OpenTelemetry Integration
+
+These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
+
+1. **Data Flow**:
+   - Metrics are collected by the process monitor
+   - The OTel connector exports data via OTLP (OpenTelemetry Protocol)
+   - The Instana Agent receives data on port 4317 (default)
+   - Data is forwarded to the Instana backend for visualization
+
+2. **Configuration**:
+   - By default, plugins connect to the Instana Agent at `localhost:4317`
+   - You can customize the agent host and port when initializing the plugins
+   - Resource attributes identify the service and host in Instana
+
+3. **Metrics Collected via OTel**:
+   - All process metrics are sent as OpenTelemetry gauge metrics
+   - Spans are created to track metric collection operations
+   - Host and process information are attached as resource attributes
+
+4. **Enabling OpenTelemetry Data Ingestion in Instana Agent**:
+   - For Instana Agent version 1.1.726 or higher, OpenTelemetry data ingestion is enabled by default
+   - For older versions, add the following to your agent's `configuration.yaml` file:
+     ```yaml
+     com.instana.plugin.opentelemetry:
+       grpc:
+         enabled: true
+       http:
+         enabled: true
+     ```
+   - The Instana Agent will listen on ports 4317 (gRPC) and 4318 (HTTP/HTTPS)
+   - By default, the agent listens only on localhost (127.0.0.1)
+
+5. **Kubernetes Configuration**:
+   - When using the Instana Agent in Kubernetes, use the service endpoint:
+     - OTLP/gRPC: `instana-agent.instana-agent:4317`
+     - OTLP/HTTP: `http://instana-agent.instana-agent:4318`
+   - Or use the host IP directly with environment variables:
+     ```yaml
+     env:
+       - name: INSTANA_AGENT_HOST
+         valueFrom:
+           fieldRef:
+             apiVersion: v1
+             fieldPath: status.hostIP
+       - name: TRACER_EXPORTER_OTLP_ENDPOINT
+         value: http://$(INSTANA_AGENT_HOST):4317
+     ```
+
+For custom OpenTelemetry configuration, modify the agent host and port parameters when calling the monitoring functions.
+
 ## Release Notes
 
 For a detailed history of changes and improvements, see the [Release Notes](RELEASE_NOTES.md).
@@ -125,5 +177,7 @@ For a detailed history of changes and improvements, see the [Release Notes](RELE
 ## License
 
 [MIT License](LICENSE)
+
+Copyright © 2025 laplaque/instana_plugins Contributors
 
 Copyright © 2025 laplaque/instana_plugins Contributors

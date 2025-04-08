@@ -1,0 +1,39 @@
+name: Require Tag on Merge to Master
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - master  # or 'main' if that's your default branch
+
+jobs:
+  check-tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Check for recent tag
+        run: |
+          # Get the merge commit SHA
+          MERGE_SHA=${{ github.event.pull_request.merge_commit_sha }}
+          
+          # Check if a tag points to this commit
+          TAG_ON_COMMIT=$(git tag --points-at $MERGE_SHA)
+          
+          if [ -z "$TAG_ON_COMMIT" ]; then
+            echo "Error: No tag was created for this merge to master."
+            echo "Please create a version tag (v*.*.*)."
+            exit 1
+          else
+            echo "Found tag: $TAG_ON_COMMIT"
+            # Check if it's a version tag
+            if [[ ! $TAG_ON_COMMIT =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              echo "Error: Tag does not follow versioning format (v*.*.*)."
+              exit 1
+            fi
+            echo "Valid version tag found for merge to master."
+          fi
