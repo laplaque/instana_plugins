@@ -138,6 +138,35 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
    - Spans are created to track metric collection operations
    - Host and process information are attached as resource attributes
 
+4. **Enabling OpenTelemetry Data Ingestion in Instana Agent**:
+   - For Instana Agent version 1.1.726 or higher, OpenTelemetry data ingestion is enabled by default
+   - For older versions, add the following to your agent's `configuration.yaml` file:
+     ```yaml
+     com.instana.plugin.opentelemetry:
+       grpc:
+         enabled: true
+       http:
+         enabled: true
+     ```
+   - The Instana Agent will listen on ports 4317 (gRPC) and 4318 (HTTP/HTTPS)
+   - By default, the agent listens only on localhost (127.0.0.1)
+
+5. **Kubernetes Configuration**:
+   - When using the Instana Agent in Kubernetes, use the service endpoint:
+     - OTLP/gRPC: `instana-agent.instana-agent:4317`
+     - OTLP/HTTP: `http://instana-agent.instana-agent:4318`
+   - Or use the host IP directly with environment variables:
+     ```yaml
+     env:
+       - name: INSTANA_AGENT_HOST
+         valueFrom:
+           fieldRef:
+             apiVersion: v1
+             fieldPath: status.hostIP
+       - name: TRACER_EXPORTER_OTLP_ENDPOINT
+         value: http://$(INSTANA_AGENT_HOST):4317
+     ```
+
 For custom OpenTelemetry configuration, modify the agent host and port parameters when calling the monitoring functions.
 
 ## Release Notes
