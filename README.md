@@ -118,6 +118,10 @@ The plugins use a common framework for process monitoring and OpenTelemetry inte
 
 Each plugin implements a sensor that uses these common components to monitor specific MicroStrategy processes.
 
+## Release Notes
+
+For a detailed history of changes and improvements, see the [Release Notes](RELEASE_NOTES.md).
+
 ## License
 
 [MIT License](LICENSE)
