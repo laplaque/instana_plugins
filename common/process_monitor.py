@@ -167,6 +167,7 @@ def get_context_switches(pid):
 def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port=4317):
     """
     Report metrics for the given process to Instana using OpenTelemetry.
+    This function is kept for backward compatibility.
     
     Args:
         process_name (str): The name of the process to monitor
@@ -174,7 +175,12 @@ def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port
         agent_host (str): Hostname of the Instana agent (default: localhost)
         agent_port (int): Port of the Instana agent's OTLP receiver (default: 4317)
     """
+    logger.warning("report_metrics is deprecated. Use get_process_metrics with InstanaOTelConnector instead.")
+    
     try:
+        # Import here to avoid circular imports
+        from common.otel_connector import InstanaOTelConnector
+        
         # Create a span to track the metric collection process
         otel = InstanaOTelConnector(
             service_name=plugin_name,
