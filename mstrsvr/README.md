@@ -78,6 +78,10 @@ If you're not seeing metrics in Instana:
 3. Check the Instana agent logs for errors
 4. Run the sensor manually with debug logging: `PYTHONPATH=/opt/instana/agent/plugins/custom_sensors /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py`
 
+## Release Notes
+
+For a detailed history of changes and improvements, see the [Release Notes](../RELEASE_NOTES.md).
+
 ## License
 
 This plugin is licensed under the MIT License.
