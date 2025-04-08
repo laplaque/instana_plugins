@@ -118,6 +118,28 @@ The plugins use a common framework for process monitoring and OpenTelemetry inte
 
 Each plugin implements a sensor that uses these common components to monitor specific MicroStrategy processes.
 
+### OpenTelemetry Integration
+
+These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
+
+1. **Data Flow**:
+   - Metrics are collected by the process monitor
+   - The OTel connector exports data via OTLP (OpenTelemetry Protocol)
+   - The Instana Agent receives data on port 4317 (default)
+   - Data is forwarded to the Instana backend for visualization
+
+2. **Configuration**:
+   - By default, plugins connect to the Instana Agent at `localhost:4317`
+   - You can customize the agent host and port when initializing the plugins
+   - Resource attributes identify the service and host in Instana
+
+3. **Metrics Collected via OTel**:
+   - All process metrics are sent as OpenTelemetry gauge metrics
+   - Spans are created to track metric collection operations
+   - Host and process information are attached as resource attributes
+
+For custom OpenTelemetry configuration, modify the agent host and port parameters when calling the monitoring functions.
+
 ## Release Notes
 
 For a detailed history of changes and improvements, see the [Release Notes](RELEASE_NOTES.md).
