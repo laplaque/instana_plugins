@@ -6,6 +6,7 @@ MIT License
 Copyright (c) 2025 laplaque/instana_plugins Contributors
 
 This file is part of the Instana Plugins collection.
+Version: 0.0.3
 """
 import sys
 import os
@@ -25,6 +26,7 @@ from common.otel_connector import InstanaOTelConnector
 # Define the process name with proper capitalization
 PROCESS_NAME = "M8MulPrc"
 PLUGIN_NAME = "com.instana.plugin.python.microstrategy_m8mulprc"
+VERSION = "0.0.3"
 
 def parse_args():
     """Parse command line arguments"""
@@ -97,7 +99,7 @@ def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=
 if __name__ == "__main__":
     args = parse_args()
     
-    logger.info(f"Starting {PLUGIN_NAME} with Instana agent at {args.agent_host}:{args.agent_port}")
+    logger.info(f"Starting {PLUGIN_NAME} v{VERSION} with Instana agent at {args.agent_host}:{args.agent_port}")
     
     if args.once:
         success = monitor_process(
