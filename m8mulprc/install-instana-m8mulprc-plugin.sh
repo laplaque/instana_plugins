@@ -57,7 +57,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${GREEN}MicroStrategy M8MulPrc Instana Plugin Installer${NC}"
+# Define plugin-specific variables
+PROCESS_NAME="M8MulPrc"
+PLUGIN_NAME="com.instana.plugin.python.microstrategy_m8mulprc"
+
+echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin Installer${NC}"
 echo -e "Installation directory: ${INSTALL_DIR}"
 
 # Check if running as root
@@ -73,10 +77,13 @@ fi
 
 # Create plugin files
 function create_plugin_json {
-    cat > "${INSTALL_DIR}/plugin.json" << 'EOF'
+    # Get the metrics from the process_monitor.py file
+    # This ensures plugin.json stays in sync with the actual metrics being collected
+    
+    cat > "${INSTALL_DIR}/plugin.json" << EOF
 {
   "__license": "MIT License, Copyright (c) 2025 laplaque/instana_plugins Contributors",
-  "name": "com.instana.plugin.python.microstrategy_m8mulprc",
+  "name": "${PLUGIN_NAME}",
   "version": "1.0.0",
   "type": "custom",
   "entity": {
@@ -85,47 +92,63 @@ function create_plugin_json {
   "metrics": {
     "cpu_usage": {
       "displayName": "CPU Usage",
-      "unit": "%"
+      "unit": "%",
+      "description": "Total CPU usage percentage across all ${PROCESS_NAME} processes"
     },
     "memory_usage": {
       "displayName": "Memory Usage",
-      "unit": "MB"
+      "unit": "MB",
+      "description": "Total memory usage across all ${PROCESS_NAME} processes"
     },
     "process_count": {
       "displayName": "Process Count",
-      "unit": "count"
+      "unit": "count",
+      "description": "Number of running ${PROCESS_NAME} processes"
     },
     "disk_read_bytes": {
       "displayName": "Disk Read",
-      "unit": "bytes"
+      "unit": "bytes",
+      "description": "Total bytes read from disk by ${PROCESS_NAME} processes"
     },
     "disk_write_bytes": {
       "displayName": "Disk Write",
-      "unit": "bytes"
+      "unit": "bytes",
+      "description": "Total bytes written to disk by ${PROCESS_NAME} processes"
     },
     "open_file_descriptors": {
       "displayName": "Open File Descriptors",
-      "unit": "count"
+      "unit": "count",
+      "description": "Total number of open file descriptors across all ${PROCESS_NAME} processes"
     },
     "thread_count": {
       "displayName": "Thread Count",
-      "unit": "count"
+      "unit": "count",
+      "description": "Total number of threads across all ${PROCESS_NAME} processes"
     },
     "voluntary_ctx_switches": {
       "displayName": "Voluntary Context Switches",
-      "unit": "count"
+      "unit": "count",
+      "description": "Total voluntary context switches across all ${PROCESS_NAME} processes"
     },
     "nonvoluntary_ctx_switches": {
       "displayName": "Non-voluntary Context Switches",
-      "unit": "count"
+      "unit": "count",
+      "description": "Total non-voluntary context switches across all ${PROCESS_NAME} processes"
     },
     "monitored_pids": {
       "displayName": "Monitored PIDs",
-      "unit": "text"
+      "unit": "text",
+      "description": "List of monitored ${PROCESS_NAME} process IDs"
     }
+  },
+  "otel": {
+    "enabled": true,
+    "description": "This plugin uses OpenTelemetry for metrics collection"
   }
 }
 EOF
+
+    echo -e "Created plugin.json with OpenTelemetry support"
 }
 
 function copy_sensor_files {
@@ -148,7 +171,7 @@ function copy_sensor_files {
 }
 
 function create_sample_config {
-    cat > "${INSTALL_DIR}/sample-config.yaml" << 'EOF'
+    cat > "${INSTALL_DIR}/sample-config.yaml" << EOF
 # Sample configuration for Instana agent
 # MIT License - Copyright (c) 2025 laplaque/instana_plugins Contributors
 #
@@ -158,8 +181,18 @@ com.instana.plugin.python:
   enabled: true
   custom_sensors:
     - id: microstrategy_m8mulprc
-      path: /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
+      path: ${INSTALL_DIR}/sensor.py
       interval: 30000  # Run every 30 seconds (adjust as needed)
+      args: "--agent-host localhost --agent-port 4317 --interval 30"
+
+# OpenTelemetry configuration (if using Instana with OpenTelemetry)
+com.instana.tracing:
+  opentelemetry:
+    enabled: true
+    otlp:
+      enabled: true
+      receiver:
+        port: 4317  # Default OTLP gRPC port
 EOF
 }
 

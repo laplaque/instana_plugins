@@ -128,7 +128,7 @@ def get_file_descriptor_count(pid):
             return len(os.listdir(fd_dir))
         return 0
     except Exception:
-        return 0, 0
+        return 0
 
 def get_thread_count(pid):
     """Get the number of threads for a process"""
