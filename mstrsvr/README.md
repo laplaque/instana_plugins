@@ -78,6 +78,27 @@ If you're not seeing metrics in Instana:
 3. Check the Instana agent logs for errors
 4. Run the sensor manually with debug logging: `PYTHONPATH=/opt/instana/agent/plugins/custom_sensors /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py`
 
+## Release Notes
+
+For a detailed history of changes and improvements, see the [Release Notes](../RELEASE_NOTES.md).
+
+#This should output JSON with the collected metrics if processes are found.
+
+## How It Works
+
+The plugin uses the `common/process_monitor.py` module to collect metrics about MSTRSvr processes and the `common/otel_connector.py` module to send these metrics to Instana using OpenTelemetry.
+
+The sensor runs continuously, collecting metrics every minute and sending them to the Instana agent.
+
+## Troubleshooting
+
+If you're not seeing metrics in Instana:
+
+1. Check if the MSTRSvr process is running: `ps aux | grep -i mstrsvr`
+2. Verify the sensor is running: `ps aux | grep microstrategy_mstrsvr`
+3. Check the Instana agent logs for errors
+4. Run the sensor manually with debug logging: `PYTHONPATH=/opt/instana/agent/plugins/custom_sensors /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py`
+
 ## License
 
 This plugin is licensed under the MIT License.
