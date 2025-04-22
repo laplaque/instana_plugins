@@ -3,3 +3,17 @@ opentelemetry-api>=1.20.0
 opentelemetry-sdk>=1.20.0
 opentelemetry-exporter-otlp>=1.20.0
 opentelemetry-semantic-conventions>=0.41b0
+opentelemetry-instrumentation>=0.41b0
+
+# Networking and protocol dependencies
+grpcio>=1.54.0
+protobuf>=4.22.3
+
+# Utility dependencies
+psutil>=5.9.5  # For better process monitoring
+pyyaml>=6.0    # For configuration management
+
+# Testing dependencies
+pytest>=7.3.1
+pytest-cov>=4.1.0
+mock>=5.0.2
