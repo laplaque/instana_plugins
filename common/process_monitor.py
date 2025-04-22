@@ -7,6 +7,9 @@ Copyright (c) 2025 laplaque/instana_plugins Contributors
 
 This file is part of the Instana Plugins collection.
 """
+from common.logging_config import setup_logging
+
+setup_logging()  # Configure logging at the start of the module
 import os
 import subprocess
 import json

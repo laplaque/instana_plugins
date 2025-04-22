@@ -11,6 +11,9 @@ import sys
 import os
 import argparse
 import logging
+from common.logging_config import setup_logging
+
+setup_logging()  # Configure logging at the start of the module
 import time
 
 # Configure logging
