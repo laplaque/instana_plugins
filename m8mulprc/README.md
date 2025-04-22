@@ -48,6 +48,7 @@ sudo ./install-instana-m8mulprc-plugin.sh
 ### Permissions Requirements
 
 The installation script requires elevated privileges (sudo) to:
+
 1. Copy files to the Instana agent directory (typically `/opt/instana/agent/plugins/custom_sensors/`)
 2. Set appropriate file permissions
 3. Create and enable a systemd service for automatic startup
@@ -57,18 +58,21 @@ The installation script requires elevated privileges (sudo) to:
 If you need to install without sudo access:
 
 1. Create a custom sensors directory in your user space:
+
    ```bash
    mkdir -p ~/instana-plugins/custom_sensors/microstrategy_m8mulprc
    mkdir -p ~/instana-plugins/custom_sensors/common
    ```
 
 2. Copy the necessary files:
+
    ```bash
    cp -r m8mulprc/* ~/instana-plugins/custom_sensors/microstrategy_m8mulprc/
    cp -r common/* ~/instana-plugins/custom_sensors/common/
    ```
 
 3. Configure the Instana agent to look for plugins in this directory by adding to `configuration.yaml`:
+
    ```yaml
    com.instana.plugin.python:
      enabled: true
@@ -76,6 +80,7 @@ If you need to install without sudo access:
    ```
 
 4. Set up a user-level service or cron job to run the sensor:
+
    ```bash
    # Example crontab entry to run every minute
    * * * * * PYTHONPATH=/home/yourusername/instana-plugins/custom_sensors /home/yourusername/instana-plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
@@ -89,9 +94,11 @@ The plugin needs access to process information. If running without root:
 2. If the M8MulPrc processes run as a different user, you may need to:
    - Run the Instana agent as the same user
    - Use Linux capabilities to grant specific permissions:
+
      ```bash
      sudo setcap cap_dac_read_search,cap_sys_ptrace+ep ~/instana-plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
      ```
+
    - Adjust process group permissions to allow monitoring
 
 ## Configuration
@@ -120,6 +127,7 @@ This will output JSON with the collected metrics if processes are found.
 ## How It Works
 
 The plugin uses:
+
 - `common/process_monitor.py` to collect metrics about M8MulPrc processes
 - `common/otel_connector.py` to send these metrics to Instana using OpenTelemetry
 
@@ -130,6 +138,7 @@ The sensor runs continuously, collecting metrics at configurable intervals and s
 ### Default Scheduling
 
 When installed using the installation script, the plugin is configured as a systemd service that:
+
 - Starts automatically at system boot
 - Runs continuously in the background
 - Collects metrics every 60 seconds by default
@@ -139,21 +148,26 @@ When installed using the installation script, the plugin is configured as a syst
 You can adjust how often metrics are collected in several ways:
 
 1. **Modify the systemd service**:
+
    ```bash
    sudo systemctl edit instana-m8mulprc-sensor
    ```
+
    Add the following to override the default interval (in seconds):
-   ```
+
+   ```ini
    [Service]
    Environment="COLLECTION_INTERVAL=30"
    ```
 
 2. **When running manually**:
+
    ```bash
    COLLECTION_INTERVAL=15 /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
    ```
 
 3. **In Instana agent configuration** (if using agent plugin scheduling):
+
    ```yaml
    com.instana.plugin.python:
      enabled: true
@@ -187,9 +201,12 @@ If metrics aren't appearing in Instana:
 2. Check if the sensor is running: `ps aux | grep microstrategy_m8mulprc`
 3. Examine the Instana agent logs for errors
 4. Run the sensor manually with debug logging:
+
    ```bash
    PYTHONPATH=/opt/instana/agent/plugins/custom_sensors LOG_LEVEL=DEBUG /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
+
    ```
+
 5. Verify the Instana agent is accepting OTLP connections on port 4317
 
 ## Release Notes
