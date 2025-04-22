@@ -290,6 +290,28 @@ If metrics aren't appearing in Instana:
      ./sensor.py --log-file=/var/log/instana/m8mulprc.log
      ```
 
+### Edge Cases and Limitations
+
+1. **Multiple M8MulPrc Instances**:
+   - The plugin monitors all processes matching the "M8MulPrc" pattern
+   - If you have multiple M8MulPrc instances, metrics will be aggregated
+   - To monitor instances separately, modify the process name pattern
+
+2. **Resource Constraints**:
+   - On systems with limited resources, consider increasing the collection interval
+   - For production environments with many processes, 60 seconds is recommended
+   - Memory usage increases with the number of monitored processes
+
+3. **Process Restarts**:
+   - If M8MulPrc processes restart between collections, some metrics will reset
+   - Disk I/O and context switch counters will start from zero after restart
+   - Process count metrics will remain accurate even during restarts
+
+4. **Virtualized Environments**:
+   - In virtualized environments, CPU metrics may be relative to the VM allocation
+   - Container environments may have limited access to host metrics
+   - Some metrics may be unavailable in certain container runtimes
+
 ## Release Notes
 
 For a detailed history of changes and improvements, see the [Release Notes](../RELEASE_NOTES.md).

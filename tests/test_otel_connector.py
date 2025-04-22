@@ -125,6 +125,10 @@ class TestInstanaOTelConnector(unittest.TestCase):
         self.assertEqual(connector.meter.create_gauge.call_count, 3)
         self.assertEqual(mock_gauge.record.call_count, 3)
         
+        # Reset mock counts for the next test
+        connector.meter.create_gauge.reset_mock()
+        mock_gauge.record.reset_mock()
+        
         # Test with string metrics
         metrics = {
             "cpu_usage": "10.5",
@@ -134,8 +138,8 @@ class TestInstanaOTelConnector(unittest.TestCase):
         
         # Verify gauge creation and recording (only for numeric string)
         # Only one numeric string should be processed
-        self.assertEqual(connector.meter.create_gauge.call_count, 4)
-        self.assertEqual(mock_gauge.record.call_count, 4)
+        self.assertEqual(connector.meter.create_gauge.call_count, 1)
+        self.assertEqual(mock_gauge.record.call_count, 1)
 
     @patch.object(InstanaOTelConnector, '_setup_tracing')
     @patch.object(InstanaOTelConnector, '_setup_metrics')
