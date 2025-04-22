@@ -68,11 +68,13 @@ If you need to install without sudo access:
    cp -r common/* ~/instana-plugins/custom_sensors/common/
    ```
 
-3. Configure the Instana agent to look for plugins in this directory by adding to `configuration.yaml`:
+3. Ensure the Instana agent is configured to receive OpenTelemetry data by adding to `configuration.yaml` (enabled by default in Instana agent version 1.1.726 or higher):
    ```yaml
-   com.instana.plugin.python:
-     enabled: true
-     custom_sensors_path: /home/yourusername/instana-plugins/custom_sensors
+   com.instana.plugin.opentelemetry:
+     grpc:
+       enabled: true
+     http:
+       enabled: true
    ```
 
 4. Set up a user-level service or cron job to run the sensor:
@@ -96,16 +98,23 @@ The plugin needs access to process information. If running without root:
 
 ## Configuration
 
-The installer will automatically configure your Instana agent. If manual configuration is needed, add the following to your Instana agent configuration:
+The installer will automatically set up the plugin to run as a systemd service. The plugin uses OpenTelemetry to send metrics to the Instana agent.
+
+### Instana Agent Configuration
+
+Ensure your Instana agent is configured to receive OpenTelemetry data (enabled by default in Instana agent version 1.1.726 or higher):
 
 ```yaml
-com.instana.plugin.python:
-  enabled: true
-  custom_sensors:
-    - id: microstrategy_mstrsvr
-      path: /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
-      interval: 30000  # Run every 30 seconds
+com.instana.plugin.opentelemetry:
+  grpc:
+    enabled: true
+  http:
+    enabled: true
 ```
+
+The Instana agent will listen for OpenTelemetry data on:
+- Port 4317 for gRPC connections (used by default)
+- Port 4318 for HTTP/HTTPS connections
 
 ## Testing
 
@@ -153,15 +162,8 @@ You can adjust how often metrics are collected in several ways:
    COLLECTION_INTERVAL=15 /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
    ```
 
-3. **In Instana agent configuration** (if using agent plugin scheduling):
-   ```yaml
-   com.instana.plugin.python:
-     enabled: true
-     custom_sensors:
-       - id: microstrategy_mstrsvr
-         path: /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
-         interval: 30000  # 30 seconds in milliseconds
-   ```
+3. **Using a custom scheduler**:
+   You can create a custom scheduling mechanism using systemd timers or more sophisticated cron configurations.
 
 ### One-time Execution
 

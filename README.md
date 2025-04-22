@@ -136,12 +136,14 @@ If you prefer to avoid using sudo, you can manually install the plugins:
    cp -r common ~/instana-plugins/custom_sensors/
    ```
 
-4. Configure the Instana agent to look for plugins in this directory by adding to `configuration.yaml`:
+4. Configure the Instana agent to receive OpenTelemetry data by ensuring the following is in your `configuration.yaml` (enabled by default in Instana agent version 1.1.726 or higher):
 
    ```yaml
-   com.instana.plugin.python:
-     enabled: true
-     custom_sensors_path: /home/yourusername/instana-plugins/custom_sensors
+   com.instana.plugin.opentelemetry:
+     grpc:
+       enabled: true
+     http:
+       enabled: true
    ```
 
 5. Create a user-level systemd service or use cron to start the sensor:
@@ -180,16 +182,10 @@ The plugins can be scheduled to run in different ways:
    - The service monitors processes at a default interval of 60 seconds
    - This interval can be adjusted in the systemd service file
 
-2. **Instana Agent Plugin Scheduler**: When configured in the Instana agent's `configuration.yaml`:
-
-   ```yaml
-   com.instana.plugin.python:
-     enabled: true
-     custom_sensors:
-       - id: microstrategy_m8mulprc
-         path: /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
-         interval: 30000  # Run every 30 seconds (in milliseconds)
-   ```
+2. **Custom Scheduler**: You can create your own scheduling mechanism using:
+   - A custom systemd timer
+   - A more sophisticated cron job with specific timing
+   - A custom script that manages execution frequency
 
 3. **Cron Job**: For non-root installations, a cron job can be used:
 
@@ -223,11 +219,11 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
 1. **Data Flow**:
    - Metrics are collected by the process monitor
    - The OTel connector exports data via OTLP (OpenTelemetry Protocol)
-   - The Instana Agent receives data on port 4317 (default)
+   - The Instana Agent receives data on port 4317 (gRPC) or 4318 (HTTP) by default
    - Data is forwarded to the Instana backend for visualization
 
 2. **Configuration**:
-   - By default, plugins connect to the Instana Agent at `localhost:4317`
+   - By default, plugins connect to the Instana Agent at `localhost:4317` using gRPC
    - You can customize the agent host and port when initializing the plugins
    - Resource attributes identify the service and host in Instana
 
@@ -267,6 +263,8 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
        - name: TRACER_EXPORTER_OTLP_ENDPOINT
          value: http://$(INSTANA_AGENT_HOST):4317
      ```
+
+> **Note**: The `com.instana.plugin.python` configuration is no longer needed when using the OpenTelemetry interface. The plugins communicate directly with the Instana agent's OpenTelemetry endpoints.
 
 For custom OpenTelemetry configuration, modify the agent host and port parameters when calling the monitoring functions.
 
