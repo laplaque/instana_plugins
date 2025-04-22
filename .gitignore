@@ -33,4 +33,6 @@ Thumbs.db
 # Other files
 *scratchpad*
 .aider*
-#diagram.png
+.coverage
+*.log
+diagram.png

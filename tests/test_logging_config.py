@@ -27,8 +27,14 @@ class TestLoggingConfig(unittest.TestCase):
         # Clean up temporary directory
         shutil.rmtree(self.test_dir)
         
+        # Close all current handlers to avoid ResourceWarnings
+        for handler in logging.root.handlers[:]:
+            handler.close()
+            logging.root.removeHandler(handler)
+        
         # Restore original logging configuration
-        logging.root.handlers = self.root_handlers
+        for handler in self.root_handlers:
+            logging.root.addHandler(handler)
         logging.root.setLevel(self.root_level)
     
     def test_setup_logging_default(self):
@@ -105,7 +111,9 @@ class TestLoggingConfig(unittest.TestCase):
         mock_handler.side_effect = PermissionError("Permission denied")
         
         # Clear existing handlers
-        logging.root.handlers = []
+        for handler in logging.root.handlers[:]:
+            handler.close()  # Properly close handlers to avoid ResourceWarnings
+            logging.root.removeHandler(handler)
         
         # Call the function
         setup_logging(log_file=self.log_file)

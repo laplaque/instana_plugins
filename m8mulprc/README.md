@@ -30,9 +30,11 @@ The M8MulPrc plugin monitors the MicroStrategy Multi-Process Server component, p
 - Instana Agent 1.2.0 or higher
 - Python 3.6 or higher
 - OpenTelemetry Python packages:
+
   ```bash
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
+
 - MicroStrategy environment with M8MulPrc processes
 
 ## Installation
@@ -121,6 +123,7 @@ com.instana.plugin.opentelemetry:
 ```
 
 The Instana agent will listen for OpenTelemetry data on:
+
 - Port 4317 for gRPC connections (used by default)
 - Port 4318 for HTTP/HTTPS connections
 
@@ -134,6 +137,7 @@ To enable TLS encryption for secure communication with the Instana agent:
    - Restart the agent after adding certificates
 
 2. Configure the sensor to use TLS by setting environment variables:
+
    ```bash
    USE_TLS=true \
    CA_CERT_PATH=/path/to/ca.crt \
@@ -143,11 +147,13 @@ To enable TLS encryption for secure communication with the Instana agent:
    ```
 
 3. For systemd service, add these environment variables to the service configuration:
+
    ```bash
    sudo systemctl edit instana-m8mulprc-sensor
    ```
-   
+
    Add the following:
+
    ```ini
    [Service]
    Environment="USE_TLS=true"
@@ -240,10 +246,49 @@ If metrics aren't appearing in Instana:
 
    ```bash
    PYTHONPATH=/opt/instana/agent/plugins/custom_sensors LOG_LEVEL=DEBUG /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
-
    ```
 
 5. Verify the Instana agent is accepting OTLP connections on port 4317
+
+### Common Issues
+
+1. **Process Not Found**:
+   - If you see "No processes found matching 'M8MulPrc'" in the logs, verify that:
+     - The MicroStrategy M8MulPrc process is running
+     - The process name matches (case-insensitive matching is used)
+     - You have permissions to view process information
+
+2. **Permission Issues**:
+   - If you see permission errors when accessing `/proc` files:
+     - Run the sensor with elevated privileges
+     - Ensure the user running the sensor has access to process information
+
+3. **Connection to Instana Agent**:
+   - If metrics aren't appearing in Instana:
+     - Verify the agent host and port are correct
+     - Check that the Instana agent is running
+     - Ensure OpenTelemetry is enabled in the agent configuration
+
+4. **Debugging**:
+   - Run the sensor with `--log-level=DEBUG` for more detailed logs:
+
+     ```bash
+     ./sensor.py --log-level=DEBUG
+     ```
+
+   - Run once with `--once` flag to check for immediate issues:
+
+     ```bash
+     ./sensor.py --once --log-level=DEBUG
+     ```
+
+5. **Log File Location**:
+   - By default, logs are written to `app.log` in the current directory
+   - Specify a custom log file with `--log-file`:
+
+     ```bash
+     ./sensor.py --log-file=/var/log/instana/m8mulprc.log
+     ```
 
 ## Release Notes
 

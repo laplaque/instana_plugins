@@ -338,14 +338,15 @@ The project includes a comprehensive test suite to ensure reliability:
    cd tests
    python run_tests.py
    
-   # Run with coverage report
-   python run_tests.py --coverage
+   # Run with coverage report (requires coverage package)
+   python -m coverage run -m unittest discover
+   python -m coverage report
    
-   # Run specific test pattern
-   python run_tests.py --pattern="test_otel*.py"
+   # Run specific test file
+   python -m unittest tests/test_logging_config.py
    
-   # Generate XML test report (for CI/CD)
-   python run_tests.py --xml
+   # Run all tests with unittest discover
+   python -m unittest discover tests
    ```
 
 2. **Test Components**:
@@ -365,6 +366,41 @@ The project includes a comprehensive test suite to ensure reliability:
    - Mock external dependencies
    - Test both success and failure paths
 
+## Troubleshooting
+
+### Common Issues
+
+1. **Missing Dependencies**:
+   - If you see `ModuleNotFoundError` or `ImportError`, install the required packages:
+     ```bash
+     pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp coverage
+     ```
+
+2. **Resource Warnings in Tests**:
+   - Resource warnings about unclosed files are expected during tests and can be ignored
+   - These occur when testing file handlers and are cleaned up by the test tearDown method
+
+3. **Permission Errors**:
+   - When running as a non-root user, you may see permission errors accessing `/proc` files
+   - Solution: Run with elevated privileges or modify the process monitoring to handle permission errors gracefully
+
+4. **OpenTelemetry Connection Issues**:
+   - If metrics aren't appearing in Instana, check:
+     - Instana agent is running (`systemctl status instana-agent`)
+     - Agent is configured for OpenTelemetry (`grep opentelemetry /opt/instana/agent/etc/instana/configuration.yaml`)
+     - No firewall is blocking port 4317
+     - Try running with `--log-level=DEBUG` for more detailed connection information
+
+5. **Test Failures**:
+   - If tests fail with `AssertionError`, check that your environment matches the expected test conditions
+   - Some tests may need to be adjusted for your specific environment
+   - Use the `-v` flag with unittest for more verbose output: `python -m unittest -v tests/test_logging_config.py`
+
+6. **Log File Issues**:
+   - If log files aren't being created, check directory permissions
+   - Try specifying an absolute path with `--log-file=/path/to/logfile.log`
+   - For systemd services, ensure the user running the service has write permissions to the log directory
+
 ## Release Notes
 
 For a detailed history of changes and improvements, see the [Release Notes](RELEASE_NOTES.md).
@@ -372,7 +408,5 @@ For a detailed history of changes and improvements, see the [Release Notes](RELE
 ## License
 
 [MIT License](LICENSE)
-
-Copyright © 2025 laplaque/instana_plugins Contributors
 
 Copyright © 2025 laplaque/instana_plugins Contributors

@@ -30,9 +30,11 @@ The MSTRSvr plugin monitors the MicroStrategy Intelligence Server component, pro
 - Instana Agent 1.2.0 or higher
 - Python 3.6 or higher
 - OpenTelemetry Python packages:
+
   ```bash
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
+
 - MicroStrategy environment with Intelligence Server processes
 
 ## Installation
@@ -51,6 +53,7 @@ sudo ./install-instana-mstrsvr-plugin.sh
 ### Permissions Requirements
 
 The installation script requires elevated privileges (sudo) to:
+
 1. Copy files to the Instana agent directory (typically `/opt/instana/agent/plugins/custom_sensors/`)
 2. Set appropriate file permissions
 3. Create and enable a systemd service for automatic startup
@@ -60,18 +63,21 @@ The installation script requires elevated privileges (sudo) to:
 If you need to install without sudo access:
 
 1. Create a custom sensors directory in your user space:
+
    ```bash
    mkdir -p ~/instana-plugins/custom_sensors/microstrategy_mstrsvr
    mkdir -p ~/instana-plugins/custom_sensors/common
    ```
 
 2. Copy the necessary files:
+
    ```bash
    cp -r mstrsvr/* ~/instana-plugins/custom_sensors/microstrategy_mstrsvr/
    cp -r common/* ~/instana-plugins/custom_sensors/common/
    ```
 
 3. Ensure the Instana agent is configured to receive OpenTelemetry data by adding to `configuration.yaml` (enabled by default in Instana agent version 1.1.726 or higher):
+
    ```yaml
    com.instana.plugin.opentelemetry:
      grpc:
@@ -81,6 +87,7 @@ If you need to install without sudo access:
    ```
 
 4. Set up a user-level service or cron job to run the sensor:
+
    ```bash
    # Example crontab entry to run every minute
    * * * * * PYTHONPATH=/home/yourusername/instana-plugins/custom_sensors /home/yourusername/instana-plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
@@ -94,9 +101,11 @@ The plugin needs access to process information. If running without root:
 2. If the MSTRSvr processes run as a different user, you may need to:
    - Run the Instana agent as the same user
    - Use Linux capabilities to grant specific permissions:
+
      ```bash
      sudo setcap cap_dac_read_search,cap_sys_ptrace+ep ~/instana-plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
      ```
+
    - Adjust process group permissions to allow monitoring
 
 ## Configuration
@@ -116,6 +125,7 @@ com.instana.plugin.opentelemetry:
 ```
 
 The Instana agent will listen for OpenTelemetry data on:
+
 - Port 4317 for gRPC connections (used by default)
 - Port 4318 for HTTP/HTTPS connections
 
@@ -129,6 +139,7 @@ To enable TLS encryption for secure communication with the Instana agent:
    - Restart the agent after adding certificates
 
 2. Configure the sensor to use TLS by setting environment variables:
+
    ```bash
    USE_TLS=true \
    CA_CERT_PATH=/path/to/ca.crt \
@@ -138,11 +149,13 @@ To enable TLS encryption for secure communication with the Instana agent:
    ```
 
 3. For systemd service, add these environment variables to the service configuration:
+
    ```bash
    sudo systemctl edit instana-mstrsvr-sensor
    ```
-   
+
    Add the following:
+
    ```ini
    [Service]
    Environment="USE_TLS=true"
@@ -166,6 +179,7 @@ This will output JSON with the collected metrics if processes are found.
 ## How It Works
 
 The plugin uses:
+
 - `common/process_monitor.py` to collect metrics about MSTRSvr processes
 - `common/otel_connector.py` to send these metrics to Instana using OpenTelemetry
 
@@ -176,6 +190,7 @@ The sensor runs continuously, collecting metrics at configurable intervals and s
 ### Default Scheduling
 
 When installed using the installation script, the plugin is configured as a systemd service that:
+
 - Starts automatically at system boot
 - Runs continuously in the background
 - Collects metrics every 60 seconds by default
@@ -185,16 +200,20 @@ When installed using the installation script, the plugin is configured as a syst
 You can adjust how often metrics are collected in several ways:
 
 1. **Modify the systemd service**:
+
    ```bash
    sudo systemctl edit instana-mstrsvr-sensor
    ```
+
    Add the following to override the default interval (in seconds):
-   ```
+
+   ```ini
    [Service]
    Environment="COLLECTION_INTERVAL=30"
    ```
 
 2. **When running manually**:
+
    ```bash
    COLLECTION_INTERVAL=15 /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
    ```
@@ -235,10 +254,52 @@ If metrics aren't appearing in Instana:
 2. Check if the sensor is running: `ps aux | grep microstrategy_mstrsvr`
 3. Examine the Instana agent logs for errors
 4. Run the sensor manually with debug logging:
+
    ```bash
    PYTHONPATH=/opt/instana/agent/plugins/custom_sensors LOG_LEVEL=DEBUG /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
    ```
+
 5. Verify the Instana agent is accepting OTLP connections on port 4317
+
+### Common Issues
+
+1. **Process Not Found**:
+   - If you see "No processes found matching 'MSTRSvr'" in the logs, verify that:
+     - The MicroStrategy Intelligence Server process is running
+     - The process name matches (case-insensitive matching is used)
+     - You have permissions to view process information
+
+2. **Permission Issues**:
+   - If you see permission errors when accessing `/proc` files:
+     - Run the sensor with elevated privileges
+     - Ensure the user running the sensor has access to process information
+
+3. **Connection to Instana Agent**:
+   - If metrics aren't appearing in Instana:
+     - Verify the agent host and port are correct
+     - Check that the Instana agent is running
+     - Ensure OpenTelemetry is enabled in the agent configuration
+
+4. **Debugging**:
+   - Run the sensor with `--log-level=DEBUG` for more detailed logs:
+
+     ```bash
+     ./sensor.py --log-level=DEBUG
+     ```
+
+   - Run once with `--once` flag to check for immediate issues:
+
+     ```bash
+     ./sensor.py --once --log-level=DEBUG
+     ```
+
+5. **Log File Location**:
+   - By default, logs are written to `app.log` in the current directory
+   - Specify a custom log file with `--log-file`:
+
+     ```bash
+     ./sensor.py --log-file=/var/log/instana/mstrsvr.log
+     ```
 
 ## Release Notes
 
@@ -249,4 +310,3 @@ For a detailed history of changes and improvements, see the [Release Notes](../R
 This plugin is licensed under the MIT License.
 
 Copyright © 2025 laplaque/instana_plugins Contributors
-
