@@ -37,3 +37,45 @@ jobs:
             fi
             echo "Valid version tag found for merge to master."
           fi
+name: Require Tag on Merge
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check if commit is a merge commit and skip if it is
+        id: check-merge
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          if [[ $COMMIT_MESSAGE == *"Merge pull request"* || $COMMIT_MESSAGE == *"Merge branch"* ]]; then
+            echo "is_merge=true" >> $GITHUB_OUTPUT
+            echo "Detected merge commit, skipping tag check"
+          else
+            echo "is_merge=false" >> $GITHUB_OUTPUT
+            echo "Not a merge commit, proceeding with tag check"
+          fi
+
+      - name: Check if commit has a tag
+        if: steps.check-merge.outputs.is_merge == 'false'
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          TAGS=$(git tag --points-at $COMMIT_SHA)
+          
+          if [ -z "$TAGS" ]; then
+            echo "Error: Direct push to main/master branch detected without a tag."
+            echo "Please create a tag for this commit or use a pull request workflow."
+            exit 1
+          else
+            echo "Commit has the following tags: $TAGS"
+          fi
