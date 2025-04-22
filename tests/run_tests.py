@@ -67,8 +67,13 @@ if __name__ == '__main__':
     
     # Run the tests
     if args.xml:
-        import xmlrunner
-        test_runner = xmlrunner.XMLTestRunner(output='test-reports', verbosity=args.verbose)
+        try:
+            import xmlrunner
+            test_runner = xmlrunner.XMLTestRunner(output='test-reports', verbosity=args.verbose)
+        except ImportError:
+            print("Warning: xmlrunner not installed. Using standard test runner instead.")
+            print("To install xmlrunner, run: pip install unittest-xml-reporting")
+            test_runner = unittest.TextTestRunner(verbosity=args.verbose)
     else:
         test_runner = unittest.TextTestRunner(verbosity=args.verbose)
     
