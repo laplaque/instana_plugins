@@ -1,5 +1,22 @@
 # Release Notes
 
+## Version 0.0.6 (2025-04-22)
+
+### feat: Enhanced logging and test framework
+- Added centralized logging configuration with log rotation
+- Improved test coverage with edge case handling
+- Added comprehensive troubleshooting documentation
+- Fixed resource warnings in tests related to unclosed file handlers
+- Corrected handling of special characters in process names
+- Improved error handling in OpenTelemetry connector
+
+### docs: Expanded documentation with known limitations
+- Updated documentation with known limitations and edge cases
+- Enhanced test framework with better mocking of OpenTelemetry
+- Added coverage reporting to test suite
+- Added detailed troubleshooting sections to plugin READMEs
+- Improved installation and configuration instructions
+
 ## Version 0.0.3 (2025-04-09)
 
 ### docs: Enhanced OpenTelemetry documentation and configuration
