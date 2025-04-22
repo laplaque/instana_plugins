@@ -7,6 +7,9 @@ Copyright (c) 2025 laplaque/instana_plugins Contributors
 
 This file is part of the Instana Plugins collection.
 """
+from common.logging_config import setup_logging
+
+setup_logging()  # Configure logging at the start of the module
 import os
 import subprocess
 import json
@@ -19,7 +22,6 @@ from typing import Dict, Any, Optional
 from common.otel_connector import InstanaOTelConnector
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_process_metrics(process_name):
@@ -30,61 +32,74 @@ def get_process_metrics(process_name):
         process_name (str): The name of the process to monitor
         
     Returns:
-        dict: A dictionary containing process metrics
+        dict: A dictionary containing process metrics or None if no processes found
     """
-    # Get process information
-    process_info = subprocess.check_output(["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"]).decode('utf-8')
-    
-    # Filter for processes (case insensitive)
-    process_regex = re.compile(process_name, re.IGNORECASE)
-    matching_processes = [line for line in process_info.split('\n') if process_regex.search(line)]
-    
-    process_count = len(matching_processes)
-    total_cpu = 0
-    total_memory = 0
-    
-    # Initialize metrics
-    total_disk_read = 0
-    total_disk_write = 0
-    total_open_fds = 0
-    total_threads = 0
-    total_voluntary_ctx_switches = 0
-    total_nonvoluntary_ctx_switches = 0
-    
-    # Track PIDs for logging
-    process_pids = []
-    
-    for process in matching_processes:
-        parts = process.split()
-        if len(parts) < 4:
-            continue
+    try:
+        # Get process information
+        process_info = subprocess.check_output(
+            ["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"],
+            stderr=subprocess.PIPE
+        ).decode('utf-8')
         
-        try:
-            pid = parts[0]
-            process_pids.append(pid)
-            total_cpu += float(parts[1])
-            total_memory += float(parts[2])
+        # Filter for processes (case insensitive)
+        process_regex = re.compile(process_name, re.IGNORECASE)
+        matching_processes = [line for line in process_info.split('\n') if process_regex.search(line)]
+        
+        process_count = len(matching_processes)
+        if process_count == 0:
+            logger.warning(f"No processes found matching '{process_name}'")
+            return None
             
-            # Get disk I/O for this PID
-            read_bytes, write_bytes = get_disk_io_for_pid(pid)
-            total_disk_read += read_bytes
-            total_disk_write += write_bytes
+        # Initialize metrics
+        total_cpu = 0
+        total_memory = 0
+        total_disk_read = 0
+        total_disk_write = 0
+        total_open_fds = 0
+        total_threads = 0
+        total_voluntary_ctx_switches = 0
+        total_nonvoluntary_ctx_switches = 0
+        
+        # Track PIDs for logging
+        process_pids = []
+        
+        for process in matching_processes:
+            parts = process.split()
+            if len(parts) < 4:
+                continue
             
-            # Get file descriptor count
-            open_fds = get_file_descriptor_count(pid)
-            total_open_fds += open_fds
-            
-            # Get thread count
-            thread_count = get_thread_count(pid)
-            total_threads += thread_count
-            
-            # Get context switches
-            vol_ctx, nonvol_ctx = get_context_switches(pid)
-            total_voluntary_ctx_switches += vol_ctx
-            total_nonvoluntary_ctx_switches += nonvol_ctx
-        except Exception:
-            logger.exception(f"Error processing PID {pid}")
-            continue
+            try:
+                pid = parts[0]
+                process_pids.append(pid)
+                total_cpu += float(parts[1])
+                total_memory += float(parts[2])
+                
+                # Get disk I/O for this PID
+                read_bytes, write_bytes = get_disk_io_for_pid(pid)
+                total_disk_read += read_bytes
+                total_disk_write += write_bytes
+                
+                # Get file descriptor count
+                open_fds = get_file_descriptor_count(pid)
+                total_open_fds += open_fds
+                
+                # Get thread count
+                thread_count = get_thread_count(pid)
+                total_threads += thread_count
+                
+                # Get context switches
+                vol_ctx, nonvol_ctx = get_context_switches(pid)
+                total_voluntary_ctx_switches += vol_ctx
+                total_nonvoluntary_ctx_switches += nonvol_ctx
+            except Exception as e:
+                logger.warning(f"Error processing PID {pid}: {str(e)}")
+                continue
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error executing process command: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error in get_process_metrics: {str(e)}")
+        return None
     
     return {
         "cpu_usage": total_cpu,
@@ -164,7 +179,8 @@ def get_context_switches(pid):
     except Exception:
         return 0, 0
 
-def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port=4317):
+def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port=4317, 
+                  use_tls=False, ca_cert_path=None, client_cert_path=None, client_key_path=None):
     """
     Report metrics for the given process to Instana using OpenTelemetry.
     This function is kept for backward compatibility.
@@ -174,6 +190,10 @@ def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port
         plugin_name (str): The name of the Instana plugin
         agent_host (str): Hostname of the Instana agent (default: localhost)
         agent_port (int): Port of the Instana agent's OTLP receiver (default: 4317)
+        use_tls (bool): Whether to use TLS encryption for the connection (default: False)
+        ca_cert_path (str): Path to CA certificate file for TLS verification (optional)
+        client_cert_path (str): Path to client certificate file for TLS authentication (optional)
+        client_key_path (str): Path to client key file for TLS authentication (optional)
     """
     logger.warning("report_metrics is deprecated. Use get_process_metrics with InstanaOTelConnector instead.")
     
@@ -189,7 +209,11 @@ def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port
             resource_attributes={
                 "process.name": process_name,
                 "host.name": os.uname()[1]
-            }
+            },
+            use_tls=use_tls,
+            ca_cert_path=ca_cert_path,
+            client_cert_path=client_cert_path,
+            client_key_path=client_key_path
         )
         
         # Create a span for the metric collection
