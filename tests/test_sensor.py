@@ -37,7 +37,7 @@ class TestSensors(unittest.TestCase):
         # Verify constants are set correctly
         self.assertEqual(m8mulprc.sensor.PROCESS_NAME, "M8MulPrc")
         self.assertEqual(m8mulprc.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8mulprc")
-        self.assertEqual(m8mulprc.sensor.VERSION, "0.0.3")
+        self.assertEqual(m8mulprc.sensor.VERSION, "0.0.6")
 
     def test_mstrsvr_sensor(self):
         """Test MSTRSvr sensor."""
@@ -47,7 +47,17 @@ class TestSensors(unittest.TestCase):
         # Verify constants are set correctly
         self.assertEqual(mstrsvr.sensor.PROCESS_NAME, "MSTRSvr")
         self.assertEqual(mstrsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_mstrsvr")
-        self.assertEqual(mstrsvr.sensor.VERSION, "0.0.3")
+        self.assertEqual(mstrsvr.sensor.VERSION, "0.0.6")
+        
+    def test_m8refsvr_sensor(self):
+        """Test M8RefSvr sensor."""
+        # Import the sensor module
+        import m8refsvr.sensor
+        
+        # Verify constants are set correctly
+        self.assertEqual(m8refsvr.sensor.PROCESS_NAME, "M8RefSvr")
+        self.assertEqual(m8refsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8refsvr")
+        self.assertEqual(m8refsvr.sensor.VERSION, "0.0.6")
 
 if __name__ == '__main__':
     unittest.main()
