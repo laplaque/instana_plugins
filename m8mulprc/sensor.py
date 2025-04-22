@@ -18,7 +18,7 @@ from common.base_sensor import run_sensor
 # Define the process name with proper capitalization
 PROCESS_NAME = "M8MulPrc"
 PLUGIN_NAME = "com.instana.plugin.python.microstrategy_m8mulprc"
-VERSION = "0.0.6"
+VERSION = "0.0.7"
 
 if __name__ == "__main__":
     run_sensor(PROCESS_NAME, PLUGIN_NAME, VERSION)
