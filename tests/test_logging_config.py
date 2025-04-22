@@ -105,10 +105,15 @@ class TestLoggingConfig(unittest.TestCase):
         self.assertEqual(file_handler.backupCount, 3)
     
     @patch('logging.handlers.RotatingFileHandler')
-    def test_file_handler_creation_error(self, mock_handler):
+    @patch('logging.StreamHandler')
+    def test_file_handler_creation_error(self, mock_stream_handler, mock_rotating_handler):
         """Test handling of errors when creating file handler."""
         # Make the handler raise an exception
-        mock_handler.side_effect = PermissionError("Permission denied")
+        mock_rotating_handler.side_effect = PermissionError("Permission denied")
+        
+        # Set up a mock for the console handler
+        mock_console = MagicMock()
+        mock_stream_handler.return_value = mock_console
         
         # Clear existing handlers
         for handler in logging.root.handlers[:]:
@@ -120,7 +125,10 @@ class TestLoggingConfig(unittest.TestCase):
         
         # Should still have console handler
         self.assertEqual(len(logging.root.handlers), 1)
-        self.assertIsInstance(logging.root.handlers[0], logging.StreamHandler)
+        self.assertIs(logging.root.handlers[0], mock_console)
+        
+        # Verify warning was set on console handler
+        mock_console.setLevel.assert_called_with(logging.WARNING)
 
 if __name__ == '__main__':
     unittest.main()

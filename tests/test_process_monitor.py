@@ -232,11 +232,10 @@ nonvoluntary_ctxt_switches: 2000
         self.assertEqual(nonvol_ctx, 0)
 
     @patch('common.process_monitor.get_process_metrics')
-    @patch('common.process_monitor.InstanaOTelConnector', new_callable=MagicMock)
     @patch('builtins.print')
-    def test_report_metrics(self, mock_print, mock_connector, mock_get_metrics):
+    def test_report_metrics(self, mock_print, mock_get_metrics):
         """Test report_metrics function."""
-        # Mock metrics and connector
+        # Mock metrics
         mock_metrics = {
             "cpu_usage": 10.5,
             "memory_usage": 20.3,
@@ -244,12 +243,14 @@ nonvoluntary_ctxt_switches: 2000
         }
         mock_get_metrics.return_value = mock_metrics
         
+        # Create a mock for InstanaOTelConnector
+        mock_connector = MagicMock()
         mock_connector_instance = MagicMock()
         mock_connector.return_value = mock_connector_instance
         mock_span = MagicMock()
         mock_connector_instance.create_span.return_value.__enter__.return_value = mock_span
         
-        # Call function
+        # Call function with patched InstanaOTelConnector
         with patch('common.process_monitor.InstanaOTelConnector', mock_connector):
             report_metrics("TestProcess", "test.plugin")
         
@@ -260,7 +261,6 @@ nonvoluntary_ctxt_switches: 2000
         
         # Verify print was called with JSON
         mock_print.assert_called_once()
-        # We can't easily check the exact JSON, but we can verify it was called
 
 if __name__ == '__main__':
     unittest.main()

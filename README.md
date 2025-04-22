@@ -90,9 +90,11 @@ graph TD
 - Instana Agent 1.2.0 or higher
 - Python 3.6 or higher
 - OpenTelemetry Python packages:
+
   ```bash
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
+
 - MicroStrategy environment
 
 ## Installation
@@ -262,6 +264,7 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
      - `client_key_path`: Path to client key for mutual TLS
    - When TLS is enabled, the endpoint URL is automatically prefixed with `https://`
    - Environment variables can be used to configure TLS:
+
      ```bash
      USE_TLS=true
      CA_CERT_PATH=/path/to/ca.crt
@@ -269,7 +272,7 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
      CLIENT_KEY_PATH=/path/to/client.key
      ```
 
-5. **Kubernetes Configuration**:
+6. **Kubernetes Configuration**:
    - When using the Instana Agent in Kubernetes, use the service endpoint:
      - OTLP/gRPC: `instana-agent.instana-agent:4317`
      - OTLP/HTTP: `http://instana-agent.instana-agent:4318`
@@ -307,10 +310,13 @@ The plugins use Python's built-in logging framework with a centralized configura
 
 3. **Customizing Logging**:
    - Set the log level with the `--log-level` command line argument:
+
      ```bash
      ./sensor.py --log-level=DEBUG
      ```
+
    - Environment variables can also be used to configure logging:
+
      ```bash
      export LOG_LEVEL=DEBUG
      export LOG_FILE=/var/log/instana/m8mulprc.log
@@ -333,6 +339,7 @@ The plugins use Python's built-in logging framework with a centralized configura
 The project includes a comprehensive test suite to ensure reliability:
 
 1. **Running Tests**:
+
    ```bash
    # Run all tests
    cd tests
@@ -372,6 +379,7 @@ The project includes a comprehensive test suite to ensure reliability:
 
 1. **Missing Dependencies**:
    - If you see `ModuleNotFoundError` or `ImportError`, install the required packages:
+
      ```bash
      pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp coverage
      ```
@@ -400,6 +408,39 @@ The project includes a comprehensive test suite to ensure reliability:
    - If log files aren't being created, check directory permissions
    - Try specifying an absolute path with `--log-file=/path/to/logfile.log`
    - For systemd services, ensure the user running the service has write permissions to the log directory
+
+## Known Limitations and Edge Cases
+
+1. **Process Detection Limitations**:
+   - The plugin relies on the `ps` command and regex matching to find processes
+   - Process names that are very similar may both be detected (e.g., "MSTRSvr" and "MSTRSvrMonitor")
+   - Very short-lived processes might be missed between collection intervals
+
+2. **Resource Usage**:
+   - On systems with many processes, the monitoring itself consumes some resources
+   - Collection intervals shorter than 15 seconds may impact performance on busy systems
+   - Memory usage increases with the number of monitored processes
+
+3. **Metric Collection Edge Cases**:
+   - If a process restarts between collections, cumulative metrics like disk I/O will reset
+   - Process IDs may change between collections if processes restart
+   - Some metrics may be unavailable on certain Linux distributions or container environments
+
+4. **OpenTelemetry Limitations**:
+   - The OpenTelemetry protocol has a maximum message size (default 4MB)
+   - Very large metric batches may be dropped if they exceed size limits
+   - Network interruptions between the plugin and Instana agent can cause metric loss
+   - TLS certificate validation may fail if system time is incorrect
+
+5. **Containerized Environments**:
+   - In containerized environments, some `/proc` metrics may be container-specific rather than host-wide
+   - When running in Kubernetes, process metrics may be limited by container boundaries
+   - Docker containers may require additional privileges to access host process information
+
+6. **High Availability Setups**:
+   - In HA MicroStrategy environments with multiple servers, each server needs its own plugin instance
+   - The plugin doesn't automatically discover or monitor new MicroStrategy instances
+   - Manual configuration is needed when adding new servers to the environment
 
 ## Release Notes
 

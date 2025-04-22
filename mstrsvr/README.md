@@ -301,6 +301,29 @@ If metrics aren't appearing in Instana:
      ./sensor.py --log-file=/var/log/instana/mstrsvr.log
      ```
 
+### Edge Cases and Limitations
+
+1. **High-Load MicroStrategy Environments**:
+   - In high-load environments, the Intelligence Server may spawn many processes
+   - Consider increasing the collection interval to reduce monitoring overhead
+   - For servers with >50% CPU utilization, use 120-300 second intervals
+
+2. **Clustered Environments**:
+   - In clustered MicroStrategy environments, install the plugin on each node
+   - Each node will report metrics independently to Instana
+   - Metrics are not automatically aggregated across cluster nodes
+
+3. **Memory-Intensive Workloads**:
+   - For Intelligence Servers handling memory-intensive workloads:
+     - Monitor the plugin's own resource usage
+     - Consider using the `--once` flag with a custom scheduler for better control
+     - Adjust collection frequency based on server load patterns
+
+4. **Process Name Variations**:
+   - Some MicroStrategy installations may use different process names
+   - The plugin uses case-insensitive matching for "MSTRSvr"
+   - If your process name differs significantly, modify the sensor.py file
+
 ## Release Notes
 
 For a detailed history of changes and improvements, see the [Release Notes](../RELEASE_NOTES.md).
