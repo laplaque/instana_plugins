@@ -79,43 +79,59 @@ class InstanaOTelConnector:
         
     def _setup_tracing(self):
         """Set up the OpenTelemetry tracer provider and exporter."""
-        # Create OTLP exporter for traces
-        otlp_endpoint = f"{self.agent_host}:{self.agent_port}"
-        span_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
-        
-        # Create and set the tracer provider
-        tracer_provider = TracerProvider(resource=self.resource)
-        span_processor = BatchSpanProcessor(span_exporter)
-        tracer_provider.add_span_processor(span_processor)
-        trace.set_tracer_provider(tracer_provider)
-        
-        # Get a tracer
-        self.tracer = trace.get_tracer(
-            self.service_name,
-            schema_url="https://opentelemetry.io/schemas/1.11.0"
-        )
+        try:
+            # Create OTLP exporter for traces
+            otlp_endpoint = f"{self.agent_host}:{self.agent_port}"
+            span_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            
+            # Create and set the tracer provider
+            tracer_provider = TracerProvider(resource=self.resource)
+            span_processor = BatchSpanProcessor(span_exporter)
+            tracer_provider.add_span_processor(span_processor)
+            trace.set_tracer_provider(tracer_provider)
+            
+            # Store provider for cleanup
+            self._tracer_provider = tracer_provider
+            
+            # Get a tracer
+            self.tracer = trace.get_tracer(
+                self.service_name,
+                schema_url="https://opentelemetry.io/schemas/1.11.0"
+            )
+            logger.debug(f"Tracing setup completed for {self.service_name}")
+        except Exception as e:
+            logger.error(f"Error setting up tracing: {e}")
+            raise
         
     def _setup_metrics(self):
         """Set up the OpenTelemetry meter provider and exporter."""
-        # Create OTLP exporter for metrics
-        otlp_endpoint = f"{self.agent_host}:{self.agent_port}"
-        metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
-        
-        # Create metric reader
-        reader = PeriodicExportingMetricReader(
-            metric_exporter,
-            export_interval_millis=60000  # Export every 60 seconds
-        )
-        
-        # Create and set meter provider
-        meter_provider = MeterProvider(resource=self.resource, metric_readers=[reader])
-        set_meter_provider(meter_provider)
-        
-        # Get a meter
-        self.meter = get_meter_provider().get_meter(
-            self.service_name,
-            schema_url="https://opentelemetry.io/schemas/1.11.0"
-        )
+        try:
+            # Create OTLP exporter for metrics
+            otlp_endpoint = f"{self.agent_host}:{self.agent_port}"
+            metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
+            
+            # Create metric reader
+            reader = PeriodicExportingMetricReader(
+                metric_exporter,
+                export_interval_millis=60000  # Export every 60 seconds
+            )
+            
+            # Create and set meter provider
+            meter_provider = MeterProvider(resource=self.resource, metric_readers=[reader])
+            set_meter_provider(meter_provider)
+            
+            # Store provider for cleanup
+            self._meter_provider = meter_provider
+            
+            # Get a meter
+            self.meter = get_meter_provider().get_meter(
+                self.service_name,
+                schema_url="https://opentelemetry.io/schemas/1.11.0"
+            )
+            logger.debug(f"Metrics setup completed for {self.service_name}")
+        except Exception as e:
+            logger.error(f"Error setting up metrics: {e}")
+            raise
         
     def record_metrics(self, metrics: Dict[str, Any]):
         """
@@ -163,3 +179,21 @@ class InstanaOTelConnector:
             An OpenTelemetry span
         """
         return self.tracer.start_as_current_span(name, attributes=attributes)
+        
+    def shutdown(self):
+        """
+        Shutdown the OpenTelemetry providers and exporters.
+        This ensures all pending spans and metrics are exported.
+        """
+        try:
+            # Force flush any pending spans
+            if hasattr(self, '_tracer_provider'):
+                self._tracer_provider.force_flush()
+                
+            # Force flush any pending metrics
+            if hasattr(self, '_meter_provider'):
+                self._meter_provider.force_flush()
+                
+            logger.info(f"Successfully shut down OTel connector for {self.service_name}")
+        except Exception as e:
+            logger.error(f"Error during OTel connector shutdown: {e}")
