@@ -89,7 +89,10 @@ graph TD
 
 - Instana Agent 1.2.0 or higher
 - Python 3.6 or higher
-- OpenTelemetry Python packages
+- OpenTelemetry Python packages:
+  ```bash
+  pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+  ```
 - MicroStrategy environment
 
 ## Installation
@@ -171,6 +174,8 @@ The plugins use a common framework for process monitoring and OpenTelemetry inte
 
 - `common/process_monitor.py` - Core process metrics collection
 - `common/otel_connector.py` - OpenTelemetry integration for Instana
+- `common/logging_config.py` - Centralized logging configuration
+- `common/base_sensor.py` - Common sensor functionality
 
 Each plugin implements a sensor that uses these common components to monitor specific MicroStrategy processes.
 
@@ -247,6 +252,23 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
    - The Instana Agent will listen on ports 4317 (gRPC) and 4318 (HTTP/HTTPS)
    - By default, the agent listens only on localhost (127.0.0.1)
 
+5. **TLS Encryption for OpenTelemetry**:
+   - The plugins support secure TLS connections to the Instana agent
+   - To enable TLS, the Instana agent must be configured with certificates in `<agent_installation>/etc/certs/`
+   - The plugins can be configured with the following TLS options:
+     - `use_tls`: Enable TLS encryption (default: False)
+     - `ca_cert_path`: Path to CA certificate for server verification
+     - `client_cert_path`: Path to client certificate for mutual TLS
+     - `client_key_path`: Path to client key for mutual TLS
+   - When TLS is enabled, the endpoint URL is automatically prefixed with `https://`
+   - Environment variables can be used to configure TLS:
+     ```bash
+     USE_TLS=true
+     CA_CERT_PATH=/path/to/ca.crt
+     CLIENT_CERT_PATH=/path/to/client.crt
+     CLIENT_KEY_PATH=/path/to/client.key
+     ```
+
 5. **Kubernetes Configuration**:
    - When using the Instana Agent in Kubernetes, use the service endpoint:
      - OTLP/gRPC: `instana-agent.instana-agent:4317`
@@ -267,6 +289,81 @@ These plugins use OpenTelemetry (OTel) to send metrics and traces to Instana:
 > **Note**: The `com.instana.plugin.python` configuration is no longer needed when using the OpenTelemetry interface. The plugins communicate directly with the Instana agent's OpenTelemetry endpoints.
 
 For custom OpenTelemetry configuration, modify the agent host and port parameters when calling the monitoring functions.
+
+## Logging
+
+The plugins use Python's built-in logging framework with a centralized configuration:
+
+1. **Configuration**:
+   - Logging is configured through `common/logging_config.py`
+   - Default log level is INFO, but can be customized
+   - Logs are written to both console and a log file (default: `app.log`)
+
+2. **Log Levels**:
+   - ERROR: Critical failures that prevent the plugin from functioning
+   - WARNING: Issues that don't prevent operation but require attention
+   - INFO: Normal operational information (default)
+   - DEBUG: Detailed information for troubleshooting
+
+3. **Customizing Logging**:
+   - Set the log level with the `--log-level` command line argument:
+     ```bash
+     ./sensor.py --log-level=DEBUG
+     ```
+   - Environment variables can also be used to configure logging:
+     ```bash
+     export LOG_LEVEL=DEBUG
+     export LOG_FILE=/var/log/instana/m8mulprc.log
+     ```
+
+4. **Log File Rotation**:
+   - Log files are automatically rotated to prevent excessive disk usage
+   - Default rotation: 5 MB maximum size, keeping 3 backup files
+   - Rotation settings can be adjusted in `logging_config.py`
+
+5. **Log Format**:
+   - Timestamp in ISO format
+   - Module/component name
+   - Log level
+   - Message content
+   - Example: `2025-04-22 14:30:45,123 - m8mulprc.sensor - INFO - Starting M8MulPrc monitoring`
+
+## Testing
+
+The project includes a comprehensive test suite to ensure reliability:
+
+1. **Running Tests**:
+   ```bash
+   # Run all tests
+   cd tests
+   python run_tests.py
+   
+   # Run with coverage report
+   python run_tests.py --coverage
+   
+   # Run specific test pattern
+   python run_tests.py --pattern="test_otel*.py"
+   
+   # Generate XML test report (for CI/CD)
+   python run_tests.py --xml
+   ```
+
+2. **Test Components**:
+   - Unit tests for all core modules
+   - Mock classes for external dependencies
+   - TLS configuration tests
+   - Integration tests for OpenTelemetry
+
+3. **Test Environment**:
+   - Tests can run without an actual Instana agent
+   - Mock classes simulate OpenTelemetry behavior
+   - Environment variables can configure test behavior
+
+4. **Adding New Tests**:
+   - Follow the existing pattern in the `tests/` directory
+   - Use unittest's assertion methods
+   - Mock external dependencies
+   - Test both success and failure paths
 
 ## Release Notes
 

@@ -29,7 +29,10 @@ The M8MulPrc plugin monitors the MicroStrategy Multi-Process Server component, p
 
 - Instana Agent 1.2.0 or higher
 - Python 3.6 or higher
-- OpenTelemetry Python packages
+- OpenTelemetry Python packages:
+  ```bash
+  pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+  ```
 - MicroStrategy environment with M8MulPrc processes
 
 ## Installation
@@ -120,6 +123,40 @@ com.instana.plugin.opentelemetry:
 The Instana agent will listen for OpenTelemetry data on:
 - Port 4317 for gRPC connections (used by default)
 - Port 4318 for HTTP/HTTPS connections
+
+### TLS Encryption
+
+To enable TLS encryption for secure communication with the Instana agent:
+
+1. Configure the Instana agent with TLS certificates:
+   - Place certificate and key files in `<agent_installation>/etc/certs/`
+   - By default, the agent looks for `tls.crt` and `tls.key` files
+   - Restart the agent after adding certificates
+
+2. Configure the sensor to use TLS by setting environment variables:
+   ```bash
+   USE_TLS=true \
+   CA_CERT_PATH=/path/to/ca.crt \
+   CLIENT_CERT_PATH=/path/to/client.crt \
+   CLIENT_KEY_PATH=/path/to/client.key \
+   /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py
+   ```
+
+3. For systemd service, add these environment variables to the service configuration:
+   ```bash
+   sudo systemctl edit instana-m8mulprc-sensor
+   ```
+   
+   Add the following:
+   ```ini
+   [Service]
+   Environment="USE_TLS=true"
+   Environment="CA_CERT_PATH=/path/to/ca.crt"
+   Environment="CLIENT_CERT_PATH=/path/to/client.crt"
+   Environment="CLIENT_KEY_PATH=/path/to/client.key"
+   ```
+
+Note: When TLS is enabled, the plugin automatically uses `https://` protocol for connections.
 
 ## Testing
 

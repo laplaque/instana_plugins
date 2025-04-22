@@ -22,7 +22,6 @@ from typing import Dict, Any, Optional
 from common.otel_connector import InstanaOTelConnector
 
 # Configure logging
-setup_logging()  # Use the logging configuration from logging_config
 logger = logging.getLogger(__name__)
 
 def get_process_metrics(process_name):
@@ -180,7 +179,8 @@ def get_context_switches(pid):
     except Exception:
         return 0, 0
 
-def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port=4317):
+def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port=4317, 
+                  use_tls=False, ca_cert_path=None, client_cert_path=None, client_key_path=None):
     """
     Report metrics for the given process to Instana using OpenTelemetry.
     This function is kept for backward compatibility.
@@ -190,6 +190,10 @@ def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port
         plugin_name (str): The name of the Instana plugin
         agent_host (str): Hostname of the Instana agent (default: localhost)
         agent_port (int): Port of the Instana agent's OTLP receiver (default: 4317)
+        use_tls (bool): Whether to use TLS encryption for the connection (default: False)
+        ca_cert_path (str): Path to CA certificate file for TLS verification (optional)
+        client_cert_path (str): Path to client certificate file for TLS authentication (optional)
+        client_key_path (str): Path to client key file for TLS authentication (optional)
     """
     logger.warning("report_metrics is deprecated. Use get_process_metrics with InstanaOTelConnector instead.")
     
@@ -205,7 +209,11 @@ def report_metrics(process_name, plugin_name, agent_host="localhost", agent_port
             resource_attributes={
                 "process.name": process_name,
                 "host.name": os.uname()[1]
-            }
+            },
+            use_tls=use_tls,
+            ca_cert_path=ca_cert_path,
+            client_cert_path=client_cert_path,
+            client_key_path=client_key_path
         )
         
         # Create a span for the metric collection
