@@ -1,0 +1,60 @@
+{
+  "name": "com.instana.plugin.python.microstrategy_m8refsvr",
+  "description": "MicroStrategy M8RefSvr Process Monitoring Plugin",
+  "version": "0.0.8",
+  "author": "Instana, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/laplaque/instana_plugins"
+  },
+  "config": {
+    "interval": 60
+  },
+  "metrics": {
+    "cpu_usage": {
+      "description": "CPU usage percentage",
+      "unit": "%"
+    },
+    "memory_usage": {
+      "description": "Memory usage percentage",
+      "unit": "%"
+    },
+    "process_count": {
+      "description": "Number of M8RefSvr processes",
+      "unit": "count"
+    },
+    "disk_read_bytes": {
+      "description": "Disk read bytes",
+      "unit": "bytes"
+    },
+    "disk_write_bytes": {
+      "description": "Disk write bytes",
+      "unit": "bytes"
+    },
+    "open_file_descriptors": {
+      "description": "Number of open file descriptors",
+      "unit": "count"
+    },
+    "thread_count": {
+      "description": "Number of threads",
+      "unit": "count"
+    },
+    "voluntary_ctx_switches": {
+      "description": "Number of voluntary context switches",
+      "unit": "count"
+    },
+    "nonvoluntary_ctx_switches": {
+      "description": "Number of non-voluntary context switches",
+      "unit": "count"
+    }
+  },
+  "opentelemetry": {
+    "enabled": true,
+    "endpoint": "localhost:4317",
+    "service_name": "com.instana.plugin.python.microstrategy_m8refsvr",
+    "resource_attributes": {
+      "process.name": "M8RefSvr",
+      "service.namespace": "instana.plugins"
+    }
+  }
+}

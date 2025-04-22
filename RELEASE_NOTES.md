@@ -1,5 +1,14 @@
 # Release Notes
 
+## Version 0.0.8 (2025-04-22)
+
+### feat: Added M8RefSvr plugin
+- Created new plugin for monitoring MicroStrategy Reference Server processes
+- Added comprehensive documentation for the new plugin
+- Updated test suite to include M8RefSvr tests
+- Fixed ResourceWarnings in test suite
+- Improved error handling in sensor scripts
+
 ## Version 0.0.6 (2025-04-22)
 
 ### feat: Enhanced logging and test framework
