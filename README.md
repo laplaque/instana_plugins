@@ -181,6 +181,7 @@ The plugins can be scheduled to run in different ways:
    - This interval can be adjusted in the systemd service file
 
 2. **Instana Agent Plugin Scheduler**: When configured in the Instana agent's `configuration.yaml`:
+
    ```yaml
    com.instana.plugin.python:
      enabled: true
@@ -191,7 +192,8 @@ The plugins can be scheduled to run in different ways:
    ```
 
 3. **Cron Job**: For non-root installations, a cron job can be used:
-   ```
+
+   ```bash
    # Run every minute
    * * * * * PYTHONPATH=/path/to/sensors /path/to/sensors/m8mulprc/sensor.py
    
@@ -200,6 +202,7 @@ The plugins can be scheduled to run in different ways:
    ```
 
 4. **Manual/One-time Execution**: Run with the `--run-once` flag for a single execution:
+
    ```bash
    /opt/instana/agent/plugins/custom_sensors/microstrategy_m8mulprc/sensor.py --run-once
    ```
