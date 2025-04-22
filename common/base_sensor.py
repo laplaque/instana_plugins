@@ -39,6 +39,10 @@ def parse_args(description):
                         help='Metrics collection interval in seconds (default: 60)')
     parser.add_argument('--once', action='store_true',
                         help='Run once and exit (default: continuous monitoring)')
+    parser.add_argument('--otel-port', type=int, default=4317,
+                        help='Port of the Instana agent OTLP receiver (default: 4317)')
+    parser.add_argument('--install-location', default='/usr/local/bin',
+                        help='Installation location (default: /usr/local/bin)')
     parser.add_argument('--log-level', default='INFO',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help='Set the logging level (default: INFO)')
@@ -125,6 +129,7 @@ def run_sensor(process_name, plugin_name, version):
             interval=args.interval,
             run_once=True
         )
+        # resource_attributes is now passed directly in the connector initialization
         sys.exit(0 if success else 1)
     else:
         monitor_process(

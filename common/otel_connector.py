@@ -28,7 +28,7 @@ from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExp
 from opentelemetry.metrics import set_meter_provider, get_meter_provider
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+setup_logging()  # Use the logging configuration from logging_config
 logger = logging.getLogger(__name__)
 
 class InstanaOTelConnector:

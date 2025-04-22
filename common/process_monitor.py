@@ -22,7 +22,7 @@ from typing import Dict, Any, Optional
 from common.otel_connector import InstanaOTelConnector
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+setup_logging()  # Use the logging configuration from logging_config
 logger = logging.getLogger(__name__)
 
 def get_process_metrics(process_name):
