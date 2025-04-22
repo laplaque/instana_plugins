@@ -1,6 +1,6 @@
 # Release Notes
 
-## Version 0.0.7 (2025-04-22)
+## Version 0.0.8 (2025-04-22)
 
 ### feat: Added M8RefSvr plugin
 - Created new plugin for monitoring MicroStrategy Reference Server processes

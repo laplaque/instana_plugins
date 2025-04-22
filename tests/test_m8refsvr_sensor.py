@@ -19,7 +19,7 @@ class TestM8RefSvrSensor(unittest.TestCase):
         from m8refsvr.sensor import PROCESS_NAME, PLUGIN_NAME, VERSION
         self.assertEqual(PROCESS_NAME, "M8RefSvr")
         self.assertEqual(PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8refsvr")
-        self.assertEqual(VERSION, "0.0.6")
+        self.assertEqual(VERSION, "0.0.8")
     
     @patch('common.base_sensor.run_sensor')
     def test_main_function(self, mock_run_sensor):
