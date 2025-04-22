@@ -1,7 +1,7 @@
 {
   "name": "com.instana.plugin.python.microstrategy_m8refsvr",
   "description": "MicroStrategy M8RefSvr Process Monitoring Plugin",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "author": "Instana, Inc.",
   "repository": {
     "type": "git",
