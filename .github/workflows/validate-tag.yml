@@ -1,4 +1,4 @@
-name: Validate Tag Version
+name: Validate Tag
 
 on:
   push:
@@ -46,21 +46,6 @@ jobs:
           else
             echo "Tag validation passed: $CURRENT_TAG is newer than $PREVIOUS_TAG"
           fi
-name: Validate Tag Format
-
-on:
-  push:
-    tags:
-      - 'v*.*.*'
-
-jobs:
-  validate-tag:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
       - name: Validate tag format
         run: |

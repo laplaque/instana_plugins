@@ -1,5 +1,17 @@
 # Release Notes
 
+## Version 0.0.9 (2025-04-23)
+
+### Changes
+- Consolidated GitHub Actions workflows for tag validation
+- Combined "Validate Tag Version" and "Validate Tag Format" into a single workflow
+- Improved documentation for OpenTelemetry integration
+- Added TLS configuration options for secure connections
+
+### Bug Fixes
+- Fixed issue with process detection for case-sensitive process names
+- Improved error handling for network connectivity issues
+
 ## Version 0.0.8 (2025-04-22)
 
 ### feat: Added M8RefSvr plugin
@@ -8,6 +20,17 @@
 - Updated test suite to include M8RefSvr tests
 - Fixed ResourceWarnings in test suite
 - Improved error handling in sensor scripts
+
+## Version 0.0.7 (2025-03-15)
+
+### Changes
+- Added support for MicroStrategy 2025 platform
+- Enhanced logging with rotation capabilities
+- Improved error handling for process monitoring
+
+### Bug Fixes
+- Fixed memory leak in long-running monitoring sessions
+- Resolved issue with metric collection during process restarts
 
 ## Version 0.0.6 (2025-04-22)
 
