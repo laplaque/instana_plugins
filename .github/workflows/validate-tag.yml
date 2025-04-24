@@ -87,3 +87,7 @@ jobs:
             echo "Please update RELEASE_NOTES.md with the new version"
             exit 1
           fi
+          
+      - name: Notify success
+        run: |
+          echo "✅ Tag validation successful for ${GITHUB_REF#refs/tags/}"

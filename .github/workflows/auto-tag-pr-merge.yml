@@ -1,0 +1,92 @@
+name: Auto Tag PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+
+jobs:
+  auto-tag:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Find latest version in RELEASE_NOTES.md
+        id: get-version
+        run: |
+          # Extract the latest version from RELEASE_NOTES.md
+          LATEST_VERSION=$(grep -m 1 -o "Version [0-9]\+\.[0-9]\+\.[0-9]\+" RELEASE_NOTES.md | head -1 | cut -d ' ' -f 2)
+          
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "Error: Could not find version in RELEASE_NOTES.md"
+            exit 1
+          fi
+          
+          echo "Latest version from RELEASE_NOTES.md: $LATEST_VERSION"
+          echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Check if version tag exists
+        id: check-tag
+        run: |
+          VERSION=${{ steps.get-version.outputs.version }}
+          TAG="v$VERSION"
+          
+          # Check if tag already exists
+          if git tag -l | grep -q "^$TAG$"; then
+            echo "Tag $TAG already exists"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $TAG does not exist yet"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+      
+      - name: Verify version in sensor files
+        id: verify-version
+        if: steps.check-tag.outputs.tag_exists == 'false'
+        run: |
+          VERSION=${{ steps.get-version.outputs.version }}
+          TAG=${{ steps.check-tag.outputs.tag }}
+          
+          # Check if version exists in sensor files
+          SENSOR_FILES=$(find . -name "sensor.py")
+          VERSION_FOUND=false
+          
+          for file in $SENSOR_FILES; do
+            if grep -q "VERSION = \"$VERSION\"" "$file"; then
+              echo "Found matching version in $file"
+              VERSION_FOUND=true
+            else
+              echo "Warning: Version $VERSION not found in $file"
+            fi
+          done
+          
+          if [ "$VERSION_FOUND" = false ]; then
+            echo "Error: Version $VERSION not found in any sensor.py files"
+            exit 1
+          fi
+          
+          echo "version_verified=true" >> $GITHUB_OUTPUT
+      
+      - name: Create and push tag
+        if: steps.check-tag.outputs.tag_exists == 'false' && steps.verify-version.outputs.version_verified == 'true'
+        run: |
+          TAG=${{ steps.check-tag.outputs.tag }}
+          
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Create and push tag
+          echo "Creating tag $TAG for PR merge"
+          git tag $TAG
+          git push origin $TAG
+          
+          echo "Successfully created and pushed tag $TAG"
