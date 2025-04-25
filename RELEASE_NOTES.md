@@ -1,5 +1,15 @@
 # Release Notes
 
+## Version 0.0.10 (2025-04-25)
+
+### feat: Added M8PrcSvr plugin
+
+- Created new plugin for monitoring MicroStrategy M8PrcSvr processes
+- Added comprehensive test suite for the M8PrcSvr plugin
+- Updated README.md with M8PrcSvr plugin information
+- Integrated with existing monitoring framework
+- Added installation script for easy deployment
+
 ## Version 0.0.9 (2025-04-23)
 
 ### Changes v0.0.9
