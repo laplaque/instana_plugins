@@ -35,4 +35,5 @@ Thumbs.db
 .aider*
 .coverage
 *.log
+*git_author=*
 diagram.png

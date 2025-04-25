@@ -1,39 +1,44 @@
-name: Require Tag on Merge to Master
+name: Require Tag on Direct Push
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
-      - master  # or 'main' if that's your default branch
+      - main
+      - master
 
 jobs:
   check-tag:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      
-      - name: Check for recent tag
+
+      - name: Check if commit is a merge commit and skip if it is
+        id: check-merge
         run: |
-          # Get the merge commit SHA
-          MERGE_SHA=${{ github.event.pull_request.merge_commit_sha }}
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          # Check if this is a PR merge or branch merge
+          if [[ $COMMIT_MESSAGE == *"Merge pull request"* || $COMMIT_MESSAGE == *"Merge branch"* ]]; then
+            echo "is_merge=true" >> $GITHUB_OUTPUT
+            echo "Detected merge commit, skipping tag check"
+            exit 0
+          else
+            echo "is_merge=false" >> $GITHUB_OUTPUT
+            echo "Not a merge commit, proceeding with tag check"
+          fi
+
+      - name: Check if commit has a tag
+        if: steps.check-merge.outputs.is_merge == 'false'
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          TAGS=$(git tag --points-at $COMMIT_SHA)
           
-          # Check if a tag points to this commit
-          TAG_ON_COMMIT=$(git tag --points-at $MERGE_SHA)
-          
-          if [ -z "$TAG_ON_COMMIT" ]; then
-            echo "Error: No tag was created for this merge to master."
-            echo "Please create a version tag (v*.*.*)."
+          if [ -z "$TAGS" ]; then
+            echo "Error: Direct push to main/master branch detected without a tag."
+            echo "Please create a tag for this commit or use a pull request workflow."
             exit 1
           else
-            echo "Found tag: $TAG_ON_COMMIT"
-            # Check if it's a version tag
-            if [[ ! $TAG_ON_COMMIT =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-              echo "Error: Tag does not follow versioning format (v*.*.*)."
-              exit 1
-            fi
-            echo "Valid version tag found for merge to master."
+            echo "Commit has the following tags: $TAGS"
           fi

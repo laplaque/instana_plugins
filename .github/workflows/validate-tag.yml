@@ -1,4 +1,4 @@
-name: Validate Tag Version
+name: Validate Tag
 
 on:
   push:
@@ -46,3 +46,48 @@ jobs:
           else
             echo "Tag validation passed: $CURRENT_TAG is newer than $PREVIOUS_TAG"
           fi
+
+      - name: Validate tag format
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          
+          # Check if tag follows semantic versioning format (vX.Y.Z)
+          if ! [[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Tag '$TAG' does not follow the required format 'vX.Y.Z'"
+            exit 1
+          fi
+          
+          echo "Tag '$TAG' is valid"
+          
+      - name: Check tag in version files
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          
+          # Check if version exists in sensor files
+          SENSOR_FILES=$(find . -name "sensor.py")
+          VERSION_FOUND=false
+          
+          for file in $SENSOR_FILES; do
+            if grep -q "VERSION = \"$VERSION\"" "$file"; then
+              echo "Found matching version in $file"
+              VERSION_FOUND=true
+            fi
+          done
+          
+          if [ "$VERSION_FOUND" = false ]; then
+            echo "Error: Version $VERSION not found in sensor.py files"
+            echo "Please update the VERSION variable in all sensor.py files"
+            exit 1
+          fi
+          
+          # Check if version exists in RELEASE_NOTES.md
+          if ! grep -q "Version $VERSION" "RELEASE_NOTES.md"; then
+            echo "Error: Version $VERSION not found in RELEASE_NOTES.md"
+            echo "Please update RELEASE_NOTES.md with the new version"
+            exit 1
+          fi
+          
+      - name: Notify success
+        run: |
+          echo "✅ Tag validation successful for ${GITHUB_REF#refs/tags/}"
