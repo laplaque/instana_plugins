@@ -1,0 +1,20 @@
+{
+  "name": "com.instana.plugin.python.microstrategy_m8prcsvr",
+  "description": "Monitors MicroStrategy M8PrcSvr process",
+  "version": "0.0.10",
+  "author": "Instana, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/instana/python-sensor"
+  },
+  "keywords": [
+    "microstrategy",
+    "m8prcsvr",
+    "monitoring"
+  ],
+  "license": "MIT",
+  "main": "sensor.py",
+  "dependencies": {
+    "python": ">=3.6.0"
+  }
+}
