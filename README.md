@@ -6,6 +6,8 @@ A collection of custom plugins for Instana monitoring of MicroStrategy processes
 ## Available Plugins
 
 - [M8MulPrc Plugin](m8mulprc/README.md) - Monitor MicroStrategy M8MulPrc processes
+- [M8PrcSvr Plugin](m8prcsvr/README.md) - Monitor MicroStrategy M8PrcSvr processes
+- [M8RefSvr Plugin](m8refsvr/README.md) - Monitor MicroStrategy M8RefSvr processes
 - [MSTRSvr Plugin](mstrsvr/README.md) - Monitor MicroStrategy Intelligence Server processes
 
 ## Features
@@ -32,11 +34,15 @@ A collection of custom plugins for Instana monitoring of MicroStrategy processes
 graph TD
     subgraph "MicroStrategy Server"
         M8["M8MulPrc Process"] 
+        M8P["M8PrcSvr Process"]
+        M8R["M8RefSvr Process"]
         MS["MSTRSvr Process"]
     end
     
     subgraph "Instana Plugins"
         M8S["M8MulPrc Sensor"]
+        M8PS["M8PrcSvr Sensor"]
+        M8RS["M8RefSvr Sensor"]
         MSS["MSTRSvr Sensor"]
         
         subgraph "Common Components"
@@ -45,8 +51,12 @@ graph TD
         end
         
         M8S --> PM
+        M8PS --> PM
+        M8RS --> PM
         MSS --> PM
         M8S --> OTEL
+        M8PS --> OTEL
+        M8RS --> OTEL
         MSS --> OTEL
     end
     
@@ -56,6 +66,8 @@ graph TD
     end
     
     M8 -.-> M8S
+    M8P -.-> M8PS
+    M8R -.-> M8RS
     MS -.-> MSS
     PM --> OTEL
     OTEL --> OTLP
@@ -109,6 +121,14 @@ cd instana_plugins
 # Install specific plugins
 cd m8mulprc
 sudo ./install-instana-m8mulprc-plugin.sh
+
+# Or for M8PrcSvr
+cd ../m8prcsvr
+sudo ./install-instana-m8prcsvr-plugin.sh
+
+# Or for M8RefSvr
+cd ../m8refsvr
+sudo ./install-instana-m8refsvr-plugin.sh
 
 # Or for MSTRSvr
 cd ../mstrsvr

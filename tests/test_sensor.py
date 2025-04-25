@@ -29,6 +29,16 @@ sys.modules['opentelemetry.semantic_conventions'] = MagicMock()
 class TestSensors(unittest.TestCase):
     """Test cases for the sensor modules."""
 
+    def test_m8prcsvr_sensor(self):
+        """Test M8PrcSvr sensor."""
+        # Import the sensor module
+        import m8prcsvr.sensor
+        
+        # Verify constants are set correctly
+        self.assertEqual(m8prcsvr.sensor.PROCESS_NAME, "M8PrcSvr")
+        self.assertEqual(m8prcsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8prcsvr")
+        self.assertEqual(m8prcsvr.sensor.VERSION, "0.0.10")
+
     def test_m8mulprc_sensor(self):
         """Test M8MulPrc sensor."""
         # Import the sensor module
@@ -57,7 +67,7 @@ class TestSensors(unittest.TestCase):
         # Verify constants are set correctly
         self.assertEqual(m8refsvr.sensor.PROCESS_NAME, "M8RefSvr")
         self.assertEqual(m8refsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8refsvr")
-        self.assertEqual(m8refsvr.sensor.VERSION, "0.0.8")
+        self.assertEqual(m8refsvr.sensor.VERSION, "0.0.9")
 
 if __name__ == '__main__':
     unittest.main()
