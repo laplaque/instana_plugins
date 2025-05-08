@@ -1,5 +1,20 @@
 # Release Notes
 
+## Version 0.0.11 (2025-05-08)
+
+### feat: Added custom installation directory support for all plugins
+
+- Added `-d/--directory` parameter to all plugin installation scripts for specifying custom installation directories
+- Updated m8refsvr/install-instana-m8refsvr-plugin.sh to support the `-d` parameter
+- Updated m8prcsvr/install-instana-m8prcsvr-plugin.sh to support the `-d` parameter
+- Added `-r/--restart` parameter for consistent service control across all plugins
+- Updated documentation in affected README files:
+  - m8refsvr/README.md
+  - m8prcsvr/README.md
+  - main README.md
+- Ensured all plugins now have consistent command-line parameters and behavior
+- Improved flexibility for deployments in non-standard environments
+
 ## Version 0.0.10 (2025-04-25)
 
 ### feat: Added M8PrcSvr plugin
