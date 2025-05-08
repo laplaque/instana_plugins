@@ -118,7 +118,7 @@ Each plugin has its own installation script and documentation. Navigate to the s
 git clone https://github.com/laplaque/instana_plugins.git
 cd instana_plugins
 
-# Install specific plugins
+# Install specific plugins with default settings
 cd m8mulprc
 sudo ./install-instana-m8mulprc-plugin.sh
 
@@ -134,6 +134,31 @@ sudo ./install-instana-m8refsvr-plugin.sh
 cd ../mstrsvr
 sudo ./install-instana-mstrsvr-plugin.sh
 ```
+
+### Installation Options
+
+All plugin installation scripts now support the following command-line options:
+
+- `-d, --directory DIR` : Specify a custom installation directory
+
+  ```bash
+  # Example: Install to a custom directory
+  sudo ./install-instana-m8mulprc-plugin.sh -d /path/to/custom/directory
+  ```
+
+- `-r, --restart` : Start the service immediately after installation
+
+  ```bash
+  # Example: Install and start the service
+  sudo ./install-instana-m8refsvr-plugin.sh -r
+  ```
+
+- `-h, --help` : Show help message and exit
+
+  ```bash
+  # Example: Show help message
+  ./install-instana-m8prcsvr-plugin.sh --help
+  ```
 
 ### Permissions and Elevated Rights
 

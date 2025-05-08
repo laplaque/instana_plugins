@@ -4,11 +4,31 @@ This sensor monitors the MicroStrategy M8PrcSvr process and reports metrics to I
 
 ## Installation
 
-Run the installation script:
+Run the installation script with default settings:
 
 ```bash
-./install-instana-m8prcsvr-plugin.sh
+sudo ./install-instana-m8prcsvr-plugin.sh
 ```
+
+Or specify a custom installation directory:
+
+```bash
+sudo ./install-instana-m8prcsvr-plugin.sh -d /path/to/custom/directory
+```
+
+For all available options:
+
+```bash
+sudo ./install-instana-m8prcsvr-plugin.sh --help
+```
+
+### Installation Options
+
+The installation script supports these command-line options:
+
+- `-d, --directory DIR` : Specify a custom installation directory (default: `/opt/instana/agent/plugins/custom_sensors/microstrategy_m8prcsvr`)
+- `-r, --restart` : Start the service immediately after installation
+- `-h, --help` : Show help message and exit
 
 ## Configuration
 

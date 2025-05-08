@@ -46,9 +46,23 @@ Use the installation script to easily deploy the plugin:
 git clone https://github.com/laplaque/instana_plugins.git
 cd instana_plugins/m8refsvr
 
-# Run the installer script
+# Run the installer script with default settings
 sudo ./install-instana-m8refsvr-plugin.sh
+
+# Or specify a custom installation directory
+sudo ./install-instana-m8refsvr-plugin.sh -d /path/to/custom/directory
+
+# For all available options
+sudo ./install-instana-m8refsvr-plugin.sh --help
 ```
+
+### Installation Options
+
+The installation script supports these command-line options:
+
+- `-d, --directory DIR` : Specify a custom installation directory (default: `/opt/instana/agent/plugins/custom_sensors/microstrategy_m8refsvr`)
+- `-r, --restart` : Start the service immediately after installation
+- `-h, --help` : Show help message and exit
 
 ### Permissions Requirements
 
