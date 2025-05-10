@@ -102,7 +102,7 @@ If you need to install without sudo access:
 
    ```bash
    # Example crontab entry to run every minute
-   * * * * * PYTHONPATH=/home/yourusername/instana-plugins/custom_sensors /home/yourusername/instana-plugins/custom_sensors/microstrategy_m8refsvr/sensor.py
+   * * * * * env PYTHONPATH=/home/yourusername/instana-plugins/custom_sensors /home/yourusername/instana-plugins/custom_sensors/microstrategy_m8refsvr/sensor.py
    ```
 
 ### Process Monitoring Permissions

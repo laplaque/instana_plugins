@@ -200,7 +200,7 @@ If you prefer to avoid using sudo, you can manually install the plugins:
 
    ```bash
    # Example crontab entry to run every minute
-   * * * * * PYTHONPATH=/home/yourusername/instana-plugins/custom_sensors /home/yourusername/instana-plugins/custom_sensors/m8mulprc/sensor.py
+   * * * * * env PYTHONPATH=/home/yourusername/instana-plugins/custom_sensors /home/yourusername/instana-plugins/custom_sensors/m8mulprc/sensor.py
    ```
 
 #### Reducing Required Permissions
@@ -243,10 +243,10 @@ The plugins can be scheduled to run in different ways:
 
    ```bash
    # Run every minute
-   * * * * * PYTHONPATH=/path/to/sensors /path/to/sensors/m8mulprc/sensor.py
+   * * * * * env PYTHONPATH=/path/to/sensors /path/to/sensors/m8mulprc/sensor.py
    
    # Run every 5 minutes
-   */5 * * * * PYTHONPATH=/path/to/sensors /path/to/sensors/m8mulprc/sensor.py
+   */5 * * * * env PYTHONPATH=/path/to/sensors /path/to/sensors/m8mulprc/sensor.py
    ```
 
 4. **Manual/One-time Execution**: Run with the `--run-once` flag for a single execution:
