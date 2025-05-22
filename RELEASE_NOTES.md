@@ -1,5 +1,16 @@
 # Release Notes
 
+## Version 0.0.12 (2025-05-22)
+
+### fix: Fixed Python package import issues and enhanced error handling
+
+- Fixed `ModuleNotFoundError: No module named 'common.base_sensor'` error in all plugins
+- Added missing `__init__.py` files to all module directories (m8mulprc, m8prcsvr, m8refsvr, mstrsvr)
+- Updated installation scripts to create proper Python package structure
+- Replaced deprecated `distutils.util.strtobool` with a custom implementation
+- Enhanced error handling for missing OpenTelemetry packages
+- Improved robustness when running in environments without OpenTelemetry installed
+
 ## Version 0.0.11 (2025-05-08)
 
 ### feat: Added custom installation directory support for all plugins

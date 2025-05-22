@@ -158,6 +158,9 @@ function copy_sensor_files {
     # Copy sensor.py from the project
     cp "${SCRIPT_DIR}/sensor.py" "${INSTALL_DIR}/sensor.py"
     
+    # Create __init__.py in the installation directory
+    touch "${INSTALL_DIR}/__init__.py"
+    
     # Create common directory
     mkdir -p "${INSTALL_DIR}/common"
     
@@ -166,6 +169,8 @@ function copy_sensor_files {
     cp "${COMMON_DIR}/__init__.py" "${INSTALL_DIR}/common/__init__.py"
     cp "${COMMON_DIR}/process_monitor.py" "${INSTALL_DIR}/common/process_monitor.py"
     cp "${COMMON_DIR}/otel_connector.py" "${INSTALL_DIR}/common/otel_connector.py"
+    cp "${COMMON_DIR}/base_sensor.py" "${INSTALL_DIR}/common/base_sensor.py"
+    cp "${COMMON_DIR}/logging_config.py" "${INSTALL_DIR}/common/logging_config.py"
     
     echo -e "Copied sensor files from project to ${INSTALL_DIR}"
 }
@@ -262,4 +267,3 @@ echo -e "Installation directory: ${INSTALL_DIR}"
 echo -e "\nTo test the plugin, run: ${INSTALL_DIR}/sensor.py"
 
 exit 0
-
