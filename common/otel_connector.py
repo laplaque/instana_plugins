@@ -15,7 +15,22 @@ import json
 import logging
 from typing import Dict, Any, Optional
 import socket
-from distutils.util import strtobool
+
+# Custom implementation of strtobool to replace distutils.util.strtobool
+def strtobool(val):
+    """Convert a string representation of truth to True or False.
+    
+    True values are 'y', 'yes', 't', 'true', 'on', and '1';
+    False values are 'n', 'no', 'f', 'false', 'off', and '0'.
+    Raises ValueError if 'val' is anything else.
+    """
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return False
+    else:
+        raise ValueError(f"Invalid truth value: {val}")
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -101,8 +116,8 @@ class InstanaOTelConnector:
             if self.client_cert_path and self.client_key_path:
                 logger.info(f"Using client certificate for mutual TLS")
         
-        # Set up resource attributes
-        attributes = {
+        # Store attributes for later use
+        self.attributes = {
             "service.name": service_name,
             "service.namespace": "instana.plugins",
             "host.name": socket.gethostname(),
@@ -110,17 +125,23 @@ class InstanaOTelConnector:
         
         # Add custom resource attributes if provided
         if resource_attributes:
-            attributes.update(resource_attributes)
+            self.attributes.update(resource_attributes)
+        
+        # Only proceed with OpenTelemetry setup if it's available
+        if OPENTELEMETRY_AVAILABLE:
+            self.resource = Resource.create(self.attributes)
             
-        self.resource = Resource.create(attributes)
-        
-        # Initialize tracer
-        self._setup_tracing()
-        
-        # Initialize metrics
-        self._setup_metrics()
-        
-        logger.info(f"Initialized InstanaOTelConnector for service {service_name}")
+            # Initialize tracer
+            self._setup_tracing()
+            
+            # Initialize metrics
+            self._setup_metrics()
+            
+            logger.info(f"Initialized InstanaOTelConnector for service {service_name}")
+        else:
+            logger.warning(f"OpenTelemetry is not available. Metrics and traces will not be sent.")
+            logger.warning(f"To enable OpenTelemetry, install required packages:")
+            logger.warning(f"pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp")
         
     def _setup_tracing(self):
         """Set up the OpenTelemetry tracer provider and exporter."""
