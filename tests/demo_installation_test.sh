@@ -5,7 +5,7 @@
 # Copyright (c) 2025 laplaque/instana_plugins Contributors
 #
 # This file is part of the Instana Plugins collection.
-# Version: 0.0.12
+# Version: 0.0.13
 #
 # Demonstration script for testing Instana plugin installations
 #

@@ -5,6 +5,9 @@ MIT License
 
 Copyright (c) 2025 laplaque/instana_plugins Contributors
 
+This file is part of the Instana Plugins collection.
+Version: 0.0.13
+
 Script to check if all dependencies from requirements.txt are already installed.
 Returns 0 if all dependencies are satisfied, 1 otherwise.
 """

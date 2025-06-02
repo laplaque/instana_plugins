@@ -1,5 +1,14 @@
 # Release Notes
 
+## Version 0.0.13 (2025-06-02)
+
+- Added installation testing system to verify plugin installations
+- Created dependency checking to avoid reinstalling packages
+- Updated all installation scripts with dependency verification
+- Installation scripts now skip package installation when dependencies are satisfied
+- Added comprehensive testing documentation
+- Added demonstration script for installation testing
+
 ## Version 0.0.12 (2025-05-22)
 
 ### fix: Fixed Python package import issues and enhanced error handling

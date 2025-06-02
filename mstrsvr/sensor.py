@@ -6,7 +6,7 @@ MIT License
 Copyright (c) 2025 laplaque/instana_plugins Contributors
 
 This file is part of the Instana Plugins collection.
-Version: 0.0.12
+Version: 0.0.13
 """
 import sys
 import os
@@ -18,7 +18,7 @@ from common.base_sensor import run_sensor
 # Define the process name with proper capitalization
 PROCESS_NAME = "MSTRSvr"
 PLUGIN_NAME = "com.instana.plugin.python.microstrategy_mstrsvr"
-VERSION = "0.0.12"
+VERSION = "0.0.13"
 
 if __name__ == "__main__":
     run_sensor(PROCESS_NAME, PLUGIN_NAME, VERSION)
