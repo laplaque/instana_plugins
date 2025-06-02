@@ -2,12 +2,20 @@
 
 ## Version 0.0.13 (2025-06-02)
 
+### feat: Installation testing and process simplification
+
 - Added installation testing system to verify plugin installations
 - Created dependency checking to avoid reinstalling packages
 - Updated all installation scripts with dependency verification
 - Installation scripts now skip package installation when dependencies are satisfied
 - Added comprehensive testing documentation
 - Added demonstration script for installation testing
+- Changed default installation directory to `/opt/instana_plugins/`
+- Removed dependency on Instana agent directories
+- Improved service naming convention to `instana-microstrategy-{process}-monitor`
+- Removed unnecessary plugin.json files
+- Simplified plugin detection in installation test
+- Modified test framework to support both old and new directory structures
 
 ## Version 0.0.12 (2025-05-22)
 

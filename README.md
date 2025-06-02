@@ -137,9 +137,9 @@ sudo ./install-instana-mstrsvr-plugin.sh
 
 ### Installation Options
 
-All plugin installation scripts now support the following command-line options:
+All plugin installation scripts support the following command-line options:
 
-- `-d, --directory DIR` : Specify a custom installation directory
+- `-d, --directory DIR` : Specify a custom installation directory (default: `/opt/instana_plugins`)
 
   ```bash
   # Example: Install to a custom directory
@@ -164,7 +164,7 @@ All plugin installation scripts now support the following command-line options:
 
 The installation scripts require elevated privileges (sudo) to:
 
-1. Copy files to the Instana agent directory (typically `/opt/instana/agent/plugins/custom_sensors/`)
+1. Copy files to the plugins directory (typically `/opt/instana_plugins/`)
 2. Set appropriate permissions for the plugin files
 3. Create and enable systemd service files for automatic startup
 

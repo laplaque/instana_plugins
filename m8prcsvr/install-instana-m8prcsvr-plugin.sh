@@ -32,12 +32,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( dirname "$SCRIPT_DIR" )"
 
 # Default installation directories
-DEFAULT_INSTANA_DIR="/opt/instana/agent"
-DEFAULT_BASE_DIR="${DEFAULT_INSTANA_DIR}/plugins/custom_sensors"
+DEFAULT_BASE_DIR="/opt/instana_plugins"
 
 # Define plugin-specific variables
 PROCESS_NAME="M8PrcSvr"
-PLUGIN_NAME="com.instana.plugin.python.microstrategy_m8prcsvr"
 PLUGIN_DIR_NAME="${PROCESS_NAME,,}"  # lowercase plugin name
 
 # Define usage function
@@ -142,14 +140,12 @@ fi
 
 # Copy plugin-specific files
 echo -e "Copying plugin-specific files..."
-cp "${SCRIPT_DIR}/plugin.json" "${PLUGIN_DIR}/plugin.json"
 cp "${SCRIPT_DIR}/sensor.py" "${PLUGIN_DIR}/sensor.py"
 touch "${PLUGIN_DIR}/__init__.py"
 
 # Set permissions
 echo -e "Setting permissions..."
 chmod 755 "${PLUGIN_DIR}/sensor.py"
-chmod 644 "${PLUGIN_DIR}/plugin.json"
 
 # Check dependencies
 echo -e "Checking if dependencies are already installed..."
@@ -166,7 +162,7 @@ else
 fi
 
 # Create a systemd service file
-SERVICE_NAME="instana-${PROCESS_NAME,,}-sensor"  # lowercase process name
+SERVICE_NAME="instana-microstrategy-${PROCESS_NAME,,}-monitor"  # lowercase process name
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 if [ "$EUID" -eq 0 ]; then
@@ -176,7 +172,7 @@ if [ "$EUID" -eq 0 ]; then
         echo -e "Creating systemd service file..."
         cat > "$SERVICE_FILE" << EOF
 [Unit]
-Description=Instana ${PROCESS_NAME} Sensor
+Description=Instana MicroStrategy ${PROCESS_NAME} Monitor
 After=network.target
 
 [Service]

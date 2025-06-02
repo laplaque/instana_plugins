@@ -93,10 +93,10 @@ echo -e "${GREEN}All plugins are installed in: ${BASE_DIR}${NC}"
 echo -e "${GREEN}Common files are shared at: ${BASE_DIR}/common${NC}"
 echo
 echo -e "${YELLOW}To test in a production environment, use:${NC}"
-echo -e "  ./m8mulprc/install-instana-m8mulprc-plugin.sh -d /opt/instana/agent/plugins/custom_sensors"
-echo -e "  ./m8prcsvr/install-instana-m8prcsvr-plugin.sh -d /opt/instana/agent/plugins/custom_sensors"
-echo -e "  ./m8refsvr/install-instana-m8refsvr-plugin.sh -d /opt/instana/agent/plugins/custom_sensors"
-echo -e "  ./mstrsvr/install-instana-mstrsvr-plugin.sh -d /opt/instana/agent/plugins/custom_sensors"
+echo -e "  ./m8mulprc/install-instana-m8mulprc-plugin.sh -d /opt/instana_plugins"
+echo -e "  ./m8prcsvr/install-instana-m8prcsvr-plugin.sh -d /opt/instana_plugins"
+echo -e "  ./m8refsvr/install-instana-m8refsvr-plugin.sh -d /opt/instana_plugins"
+echo -e "  ./mstrsvr/install-instana-mstrsvr-plugin.sh -d /opt/instana_plugins"
 echo
 
 exit 0

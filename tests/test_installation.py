@@ -146,7 +146,8 @@ def find_plugin_installations():
     
     # Check default locations
     default_paths = [
-        "/opt/instana/agent/plugins/custom_sensors/",  # Default Instana location
+        "/opt/instana_plugins/",  # New default location
+        "/opt/instana/agent/plugins/custom_sensors/",  # Old Instana location
         os.path.expanduser("~/.local/share/instana/plugins/"),  # User-level location
         "./installed_plugins/"  # Local development location
     ]
@@ -164,9 +165,8 @@ def find_plugin_installations():
                 
                 if os.path.exists(plugin_dir) and os.path.isdir(plugin_dir):
                     sensor_path = os.path.join(plugin_dir, "sensor.py")
-                    plugin_json = os.path.join(plugin_dir, "plugin.json")
                     
-                    if os.path.exists(sensor_path) and os.path.exists(plugin_json):
+                    if os.path.exists(sensor_path):
                         plugin["sensor_path"] = sensor_path
                         plugin["plugin_path"] = plugin_dir
                         plugin["common_path"] = common_dir
