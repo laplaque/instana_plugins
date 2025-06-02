@@ -5,28 +5,47 @@
 # Copyright (c) 2025 laplaque/instana_plugins Contributors
 #
 # This file is part of the Instana Plugins collection.
+# Version: 0.0.12
 #
 
 # MSTRSvr Instana Plugin Installer
 # --------------------------------
 
-# Default Instana agent location for Red Hat Linux
-DEFAULT_INSTANA_DIR="/opt/instana/agent"
-DEFAULT_PLUGIN_DIR="${DEFAULT_INSTANA_DIR}/plugins/custom_sensors/microstrategy_mstrsvr"
+# Set error handling
+set -e
 
-# Set colors for better readability
+# Colors for better readability
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Function for cleanup on error
+function cleanup {
+    echo -e "${RED}Installation failed. Cleaning up...${NC}"
+    # Add cleanup code here if needed
+}
+trap cleanup ERR
+
+# Define script directories early
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PARENT_DIR="$( dirname "$SCRIPT_DIR" )"
+
+# Default installation directories
+DEFAULT_INSTANA_DIR="/opt/instana/agent"
+DEFAULT_PLUGIN_DIR="${DEFAULT_INSTANA_DIR}/plugins/custom_sensors/microstrategy_mstrsvr"
+
+# Define plugin-specific variables
+PROCESS_NAME="MSTRSvr"
+PLUGIN_NAME="com.instana.plugin.python.microstrategy_mstrsvr"
+
 # Define usage function
 function show_usage {
     echo -e "Usage: $0 [OPTIONS]"
-    echo -e "Install the MicroStrategy MSTRSvr monitoring plugin for Instana"
+    echo -e "Install the MicroStrategy ${PROCESS_NAME} monitoring plugin for Instana"
     echo -e "\nOptions:"
     echo -e "  -d, --directory DIR    Installation directory (default: ${DEFAULT_PLUGIN_DIR})"
-    echo -e "  -r, --restart          Restart Instana agent after installation"
+    echo -e "  -r, --restart          Restart service after installation"
     echo -e "  -h, --help             Show this help message and exit"
 }
 
@@ -57,12 +76,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Define plugin-specific variables
-PROCESS_NAME="MSTRSvr"
-PLUGIN_NAME="com.instana.plugin.python.microstrategy_mstrsvr"
-
 echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin Installer${NC}"
 echo -e "Installation directory: ${INSTALL_DIR}"
+
+COMMON_DIR="${INSTALL_DIR}/common"
+
+# Check if Python 3 is installed
+if ! command -v python3 &> /dev/null; then
+    echo -e "${RED}Python 3 is required but not installed. Please install Python 3 and try again.${NC}"
+    exit 1
+fi
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -75,86 +98,14 @@ if [ "$EUID" -ne 0 ]; then
     fi
 fi
 
-# Create plugin files
-function create_plugin_json {
-    # Get the metrics from the process_monitor.py file
-    # This ensures plugin.json stays in sync with the actual metrics being collected
-    
-    cat > "${INSTALL_DIR}/plugin.json" << EOF
-{
-  "__license": "MIT License, Copyright (c) 2025 laplaque/instana_plugins Contributors",
-  "name": "${PLUGIN_NAME}",
-  "version": "1.0.0",
-  "type": "custom",
-  "entity": {
-    "type": "microstrategy_mstrsvr"
-  },
-  "metrics": {
-    "cpu_usage": {
-      "displayName": "CPU Usage",
-      "unit": "%",
-      "description": "Total CPU usage percentage across all ${PROCESS_NAME} processes"
-    },
-    "memory_usage": {
-      "displayName": "Memory Usage",
-      "unit": "MB",
-      "description": "Total memory usage across all ${PROCESS_NAME} processes"
-    },
-    "process_count": {
-      "displayName": "Process Count",
-      "unit": "count",
-      "description": "Number of running ${PROCESS_NAME} processes"
-    },
-    "disk_read_bytes": {
-      "displayName": "Disk Read",
-      "unit": "bytes",
-      "description": "Total bytes read from disk by ${PROCESS_NAME} processes"
-    },
-    "disk_write_bytes": {
-      "displayName": "Disk Write",
-      "unit": "bytes",
-      "description": "Total bytes written to disk by ${PROCESS_NAME} processes"
-    },
-    "open_file_descriptors": {
-      "displayName": "Open File Descriptors",
-      "unit": "count",
-      "description": "Total number of open file descriptors across all ${PROCESS_NAME} processes"
-    },
-    "thread_count": {
-      "displayName": "Thread Count",
-      "unit": "count",
-      "description": "Total number of threads across all ${PROCESS_NAME} processes"
-    },
-    "voluntary_ctx_switches": {
-      "displayName": "Voluntary Context Switches",
-      "unit": "count",
-      "description": "Total voluntary context switches across all ${PROCESS_NAME} processes"
-    },
-    "nonvoluntary_ctx_switches": {
-      "displayName": "Non-voluntary Context Switches",
-      "unit": "count",
-      "description": "Total non-voluntary context switches across all ${PROCESS_NAME} processes"
-    },
-    "monitored_pids": {
-      "displayName": "Monitored PIDs",
-      "unit": "text",
-      "description": "List of monitored ${PROCESS_NAME} process IDs"
-    }
-  },
-  "otel": {
-    "enabled": true,
-    "description": "This plugin uses OpenTelemetry for metrics collection"
-  }
-}
-EOF
-
-    echo -e "Created plugin.json with OpenTelemetry support"
+# Function to copy plugin.json
+function copy_plugin_json {
+    cp "${SCRIPT_DIR}/plugin.json" "${INSTALL_DIR}/plugin.json"
+    echo -e "Copied plugin.json from project to ${INSTALL_DIR}"
 }
 
+# Function to copy sensor files
 function copy_sensor_files {
-    # Get the directory of this script
-    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-    
     # Copy sensor.py from the project
     cp "${SCRIPT_DIR}/sensor.py" "${INSTALL_DIR}/sensor.py"
     
@@ -165,40 +116,14 @@ function copy_sensor_files {
     mkdir -p "${INSTALL_DIR}/common"
     
     # Copy common files
-    COMMON_DIR="${SCRIPT_DIR}/../common"
-    cp "${COMMON_DIR}/__init__.py" "${INSTALL_DIR}/common/__init__.py"
-    cp "${COMMON_DIR}/process_monitor.py" "${INSTALL_DIR}/common/process_monitor.py"
-    cp "${COMMON_DIR}/otel_connector.py" "${INSTALL_DIR}/common/otel_connector.py"
-    cp "${COMMON_DIR}/base_sensor.py" "${INSTALL_DIR}/common/base_sensor.py"
-    cp "${COMMON_DIR}/logging_config.py" "${INSTALL_DIR}/common/logging_config.py"
+    COMMON_DIR="${INSTALL_DIR}/common"
+    cp "${PARENT_DIR}/common/__init__.py" "${COMMON_DIR}/__init__.py"
+    cp "${PARENT_DIR}/common/process_monitor.py" "${COMMON_DIR}/process_monitor.py"
+    cp "${PARENT_DIR}/common/otel_connector.py" "${COMMON_DIR}/otel_connector.py"
+    cp "${PARENT_DIR}/common/base_sensor.py" "${COMMON_DIR}/base_sensor.py"
+    cp "${PARENT_DIR}/common/logging_config.py" "${COMMON_DIR}/logging_config.py"
     
     echo -e "Copied sensor files from project to ${INSTALL_DIR}"
-}
-
-function create_sample_config {
-    cat > "${INSTALL_DIR}/sample-config.yaml" << EOF
-# Sample configuration for Instana agent
-# MIT License - Copyright (c) 2025 laplaque/instana_plugins Contributors
-#
-# Add this to your Instana agent configuration.yaml file
-
-com.instana.plugin.python:
-  enabled: true
-  custom_sensors:
-    - id: microstrategy_mstrsvr
-      path: ${INSTALL_DIR}/sensor.py
-      interval: 30000  # Run every 30 seconds (adjust as needed)
-      args: "--agent-host localhost --agent-port 4317 --interval 30"
-
-# OpenTelemetry configuration (if using Instana with OpenTelemetry)
-com.instana.tracing:
-  opentelemetry:
-    enabled: true
-    otlp:
-      enabled: true
-      receiver:
-        port: 4317  # Default OTLP gRPC port
-EOF
 }
 
 # Create installation directory
@@ -211,59 +136,107 @@ fi
 
 # Create plugin files
 echo -e "Creating plugin files..."
-create_plugin_json
+copy_plugin_json
 copy_sensor_files
-create_sample_config
 
 # Set permissions
 echo -e "Setting permissions..."
 chmod 755 "${INSTALL_DIR}/sensor.py"
 chmod 644 "${INSTALL_DIR}/plugin.json"
-chmod 644 "${INSTALL_DIR}/sample-config.yaml"
+chmod 644 "${COMMON_DIR}"/*.py
 
-# Check if Instana agent configuration exists
-CONFIG_FILE="${DEFAULT_INSTANA_DIR}/etc/instana/configuration.yaml"
-if [ -f "$CONFIG_FILE" ]; then
-    echo -e "${YELLOW}Instana agent configuration detected.${NC}"
-    echo -e "To enable the MSTRSvr plugin, you need to add the following to your Instana agent configuration:"
-    echo
-    cat "${INSTALL_DIR}/sample-config.yaml"
-    echo
-    
-    read -p "Would you like to append this configuration automatically? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        # Create backup of existing config
-        cp "$CONFIG_FILE" "${CONFIG_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+# Check dependencies
+echo -e "Checking if dependencies are already installed..."
+if python3 "$PARENT_DIR/common/check_dependencies.py" --requirements "$PARENT_DIR/common/requirements.txt" --quiet; then
+    echo -e "${GREEN}All dependencies are already satisfied. Skipping installation.${NC}"
+else
+    echo -e "Installing dependencies..."
+    if [ "$EUID" -ne 0 ]; then
+        echo -e "${YELLOW}Installing dependencies for non-root user...${NC}"
+        pip3 install --user -r "$PARENT_DIR/common/requirements.txt"
+    else
+        pip3 install -r "$PARENT_DIR/common/requirements.txt"
+    fi
+fi
+
+# Create a systemd service file
+SERVICE_NAME="instana-${PROCESS_NAME,,}-sensor"  # lowercase process name
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+if [ "$EUID" -eq 0 ]; then
+    if [ -f "$SERVICE_FILE" ]; then
+        echo -e "${YELLOW}Service file already exists. Skipping...${NC}"
+    else
+        echo -e "Creating systemd service file..."
+        cat > "$SERVICE_FILE" << EOF
+[Unit]
+Description=Instana ${PROCESS_NAME} Sensor
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 ${INSTALL_DIR}/sensor.py
+Restart=always
+User=root
+Environment=PYTHONUNBUFFERED=1
+Environment="PYTHONPATH=${INSTALL_DIR}"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+        echo -e "Enabling service..."
+        systemctl daemon-reload
+        systemctl enable ${SERVICE_NAME}.service
         
-        # Append configuration
-        echo "" >> "$CONFIG_FILE"
-        echo "# Added by MSTRSvr plugin installer $(date)" >> "$CONFIG_FILE"
-        cat "${INSTALL_DIR}/sample-config.yaml" >> "$CONFIG_FILE"
-        
-        echo -e "${GREEN}Configuration added to $CONFIG_FILE${NC}"
-        echo -e "${YELLOW}A backup of your original configuration was created.${NC}"
+        # Start the service if requested
+        if [ "$RESTART_AGENT" = true ]; then
+            echo -e "Starting service..."
+            systemctl start ${SERVICE_NAME}.service
+        fi
     fi
 else
-    echo -e "${YELLOW}Instana agent configuration not found at $CONFIG_FILE${NC}"
-    echo -e "Please manually add the configuration from ${INSTALL_DIR}/sample-config.yaml"
-fi
-
-# Restart Instana agent if requested
-if [ "$RESTART_AGENT" = true ]; then
-    echo -e "Restarting Instana agent..."
+    # For non-root users, create user-level systemd service
+    echo -e "${YELLOW}Non-root installation detected. To run the sensor without root:${NC}"
+    echo -e "1. Create a user-level systemd service in ~/.config/systemd/user/"
+    echo -e "2. Or use cron to schedule the sensor:"
+    echo -e "   * * * * * env PYTHONPATH=${INSTALL_DIR} python3 ${INSTALL_DIR}/sensor.py --run-once"
+    echo -e "3. Or run manually with:"
+    echo -e "   env PYTHONPATH=${INSTALL_DIR} python3 ${INSTALL_DIR}/sensor.py"
     
-    if command -v systemctl &> /dev/null && systemctl is-active --quiet instana-agent; then
-        systemctl restart instana-agent
-        echo -e "${GREEN}Instana agent restarted successfully.${NC}"
-    else
-        echo -e "${YELLOW}Could not restart Instana agent automatically.${NC}"
-        echo -e "Please restart the agent manually with: systemctl restart instana-agent"
+    # Create a sample user-level systemd service file
+    USER_SERVICE_DIR="$HOME/.config/systemd/user"
+    if [ ! -d "$USER_SERVICE_DIR" ]; then
+        mkdir -p "$USER_SERVICE_DIR"
     fi
+    
+    USER_SERVICE_FILE="$USER_SERVICE_DIR/${SERVICE_NAME}.service"
+    echo -e "Creating sample user-level systemd service at ${USER_SERVICE_FILE}"
+    cat > "$USER_SERVICE_FILE" << EOF
+[Unit]
+Description=Instana ${PROCESS_NAME} Sensor (User Service)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 ${INSTALL_DIR}/sensor.py
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+Environment="PYTHONPATH=${INSTALL_DIR}"
+
+[Install]
+WantedBy=default.target
+EOF
+    echo -e "To enable and start the user service:"
+    echo -e "systemctl --user daemon-reload"
+    echo -e "systemctl --user enable ${SERVICE_NAME}.service"
+    echo -e "systemctl --user start ${SERVICE_NAME}.service"
 fi
 
-echo -e "${GREEN}MicroStrategy MSTRSvr Instana Plugin installed successfully!${NC}"
+echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin installed successfully!${NC}"
 echo -e "Installation directory: ${INSTALL_DIR}"
-echo -e "\nTo test the plugin, run: ${INSTALL_DIR}/sensor.py"
+echo -e "\nTo test the plugin, run: ${INSTALL_DIR}/sensor.py --run-once --log-level=DEBUG"
+
+if [ "$EUID" -eq 0 ]; then
+    echo -e "To check the service status, run: systemctl status ${SERVICE_NAME}.service"
+fi
 
 exit 0

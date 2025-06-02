@@ -383,23 +383,47 @@ The plugins use Python's built-in logging framework with a centralized configura
 
 The project includes a comprehensive test suite to ensure reliability:
 
-1. **Running Tests**:
+### Verifying Installation
 
-   ```bash
-   # Run all tests
-   cd tests
-   python run_tests.py
+After installing one or more plugins, you can verify that the installation was successful using the test_installation.py script:
+
+```bash
+# Run the installation test
+cd tests
+./test_installation.py
+
+# Test only a specific plugin
+./test_installation.py --plugin m8mulprc
+
+# Check only the dependencies
+./test_installation.py --dependencies-only
+```
+
+This test script will:
+1. Check if all required dependencies are installed
+2. Find plugin installations in standard locations
+3. Test each installed plugin to verify it works correctly
+4. Provide a summary of the test results
+
+For more details on testing your installation, see the [Tests README](tests/README.md).
+
+### Running Unit Tests
+
+```bash
+# Run all tests
+cd tests
+python run_tests.py
    
-   # Run with coverage report (requires coverage package)
-   python -m coverage run -m unittest discover
-   python -m coverage report
+# Run with coverage report (requires coverage package)
+python -m coverage run -m unittest discover
+python -m coverage report
    
-   # Run specific test file
-   python -m unittest tests/test_logging_config.py
+# Run specific test file
+python -m unittest tests/test_logging_config.py
    
-   # Run all tests with unittest discover
-   python -m unittest discover tests
-   ```
+# Run all tests with unittest discover
+python -m unittest discover tests
+```
 
 2. **Test Components**:
    - Unit tests for all core modules
