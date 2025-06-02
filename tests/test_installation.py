@@ -151,8 +151,36 @@ def find_plugin_installations():
         "./installed_plugins/"  # Local development location
     ]
     
+    # First look for plugins in new structure (with common dir at base)
+    for base_path in default_paths:
+        common_dir = os.path.join(base_path, "common")
+        if os.path.exists(common_dir) and os.path.isdir(common_dir):
+            logger.info(f"✅ Found common directory at {common_dir}")
+            
+            # Check for each plugin in the base directory
+            for plugin in PLUGINS:
+                plugin_dir_name = plugin['process_name'].lower()
+                plugin_dir = os.path.join(base_path, plugin_dir_name)
+                
+                if os.path.exists(plugin_dir) and os.path.isdir(plugin_dir):
+                    sensor_path = os.path.join(plugin_dir, "sensor.py")
+                    plugin_json = os.path.join(plugin_dir, "plugin.json")
+                    
+                    if os.path.exists(sensor_path) and os.path.exists(plugin_json):
+                        plugin["sensor_path"] = sensor_path
+                        plugin["plugin_path"] = plugin_dir
+                        plugin["common_path"] = common_dir
+                        plugin["base_path"] = base_path
+                        plugin["status"] = "Found (new structure)"
+                        logger.info(f"✅ Found {plugin['process_name']} plugin at {plugin_dir} (new structure)")
+    
+    # Then look for plugins in old structure (separate plugin directories)
     for plugin in PLUGINS:
-        # Look for plugin installations
+        # Skip if already found
+        if plugin["status"] == "Found (new structure)":
+            continue
+            
+        # Look for plugin installations in old structure
         for base_path in default_paths:
             plugin_dir = f"microstrategy_{plugin['name']}"
             full_path = os.path.join(base_path, plugin_dir)
@@ -164,8 +192,10 @@ def find_plugin_installations():
                 if os.path.exists(sensor_path) and os.path.exists(plugin_json):
                     plugin["sensor_path"] = sensor_path
                     plugin["plugin_path"] = full_path
-                    plugin["status"] = "Found"
-                    logger.info(f"✅ Found {plugin['process_name']} plugin at {full_path}")
+                    plugin["common_path"] = os.path.join(full_path, "common")
+                    plugin["base_path"] = None  # No base path in old structure
+                    plugin["status"] = "Found (old structure)"
+                    logger.info(f"✅ Found {plugin['process_name']} plugin at {full_path} (old structure)")
                     break
         
         if plugin["sensor_path"] is None:
@@ -189,7 +219,14 @@ def test_plugin(plugin):
     try:
         # Set up environment variables for testing
         env = os.environ.copy()
-        env["PYTHONPATH"] = plugin["plugin_path"]
+        
+        # Set PYTHONPATH based on structure
+        if plugin["status"] == "Found (new structure)" and plugin["base_path"]:
+            env["PYTHONPATH"] = plugin["base_path"]  # Use base path for PYTHONPATH in new structure
+            logger.info(f"Using PYTHONPATH={plugin['base_path']} (new structure)")
+        else:
+            env["PYTHONPATH"] = plugin["plugin_path"]  # Old behavior
+            logger.info(f"Using PYTHONPATH={plugin['plugin_path']} (old structure)")
         
         # Run the sensor with --run-once and --log-level=DEBUG
         cmd = [sys.executable, plugin["sensor_path"], "--run-once", "--log-level=DEBUG"]
@@ -236,7 +273,7 @@ def run_plugin_tests(args):
     plugins_to_test = [p for p in PLUGINS if p["name"] in args.plugins] if args.plugins else PLUGINS
     
     for plugin in plugins_to_test:
-        if plugin["status"] == "Found":
+        if "Found" in plugin["status"]:  # Test both old and new structure installations
             success = test_plugin(plugin)
             if not success:
                 all_tests_passed = False

@@ -33,31 +33,32 @@ PARENT_DIR="$( dirname "$SCRIPT_DIR" )"
 
 # Default installation directories
 DEFAULT_INSTANA_DIR="/opt/instana/agent"
-DEFAULT_PLUGIN_DIR="${DEFAULT_INSTANA_DIR}/plugins/custom_sensors/microstrategy_m8mulprc"
+DEFAULT_BASE_DIR="${DEFAULT_INSTANA_DIR}/plugins/custom_sensors"
 
 # Define plugin-specific variables
 PROCESS_NAME="M8MulPrc"
 PLUGIN_NAME="com.instana.plugin.python.microstrategy_m8mulprc"
+PLUGIN_DIR_NAME="${PROCESS_NAME,,}"  # lowercase plugin name
 
 # Define usage function
 function show_usage {
     echo -e "Usage: $0 [OPTIONS]"
     echo -e "Install the MicroStrategy ${PROCESS_NAME} monitoring plugin for Instana"
     echo -e "\nOptions:"
-    echo -e "  -d, --directory DIR    Installation directory (default: ${DEFAULT_PLUGIN_DIR})"
+    echo -e "  -d, --directory DIR    Base installation directory (default: ${DEFAULT_BASE_DIR})"
     echo -e "  -r, --restart          Restart service after installation"
     echo -e "  -h, --help             Show this help message and exit"
 }
 
 # Parse command line arguments
-INSTALL_DIR=$DEFAULT_PLUGIN_DIR
+BASE_DIR=$DEFAULT_BASE_DIR
 RESTART_AGENT=false
 
 while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         -d|--directory)
-            INSTALL_DIR="$2"
+            BASE_DIR="$2"
             shift 2
             ;;
         -r|--restart)
@@ -76,8 +77,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Set plugin directory and common directory
+PLUGIN_DIR="${BASE_DIR}/${PLUGIN_DIR_NAME}"
+COMMON_DIR="${BASE_DIR}/common"
+
 echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin Installer${NC}"
-echo -e "Installation directory: ${INSTALL_DIR}"
+echo -e "Base installation directory: ${BASE_DIR}"
+echo -e "Plugin directory: ${PLUGIN_DIR}"
+echo -e "Common directory: ${COMMON_DIR}"
 
 # Check if Python 3 is installed
 if ! command -v python3 &> /dev/null; then
@@ -96,52 +103,53 @@ if [ "$EUID" -ne 0 ]; then
     fi
 fi
 
-# Function to copy plugin.json
-function copy_plugin_json {
-    cp "${SCRIPT_DIR}/plugin.json" "${INSTALL_DIR}/plugin.json"
-    echo -e "Copied plugin.json from project to ${INSTALL_DIR}"
-}
+# Create base directory
+echo -e "Creating base directory..."
+mkdir -p "${BASE_DIR}"
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Error: Failed to create directory ${BASE_DIR}${NC}"
+    exit 1
+fi
 
-# Function to copy sensor files
-function copy_sensor_files {
-    # Copy sensor.py from the project
-    cp "${SCRIPT_DIR}/sensor.py" "${INSTALL_DIR}/sensor.py"
+# Create plugin directory
+echo -e "Creating plugin directory..."
+mkdir -p "${PLUGIN_DIR}"
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Error: Failed to create directory ${PLUGIN_DIR}${NC}"
+    exit 1
+fi
+
+# Create common directory if it doesn't exist
+if [ ! -d "${COMMON_DIR}" ]; then
+    echo -e "Creating common directory (first plugin installation)..."
+    mkdir -p "${COMMON_DIR}"
     
-    # Create __init__.py in the installation directory
-    touch "${INSTALL_DIR}/__init__.py"
-    
-    # Create common directory
-    mkdir -p "${INSTALL_DIR}/common"
-    
-    # Copy common files
-    COMMON_DIR="${INSTALL_DIR}/common"
+    # Copy common files only if this is the first plugin being installed
     cp "${PARENT_DIR}/common/__init__.py" "${COMMON_DIR}/__init__.py"
     cp "${PARENT_DIR}/common/process_monitor.py" "${COMMON_DIR}/process_monitor.py"
     cp "${PARENT_DIR}/common/otel_connector.py" "${COMMON_DIR}/otel_connector.py"
     cp "${PARENT_DIR}/common/base_sensor.py" "${COMMON_DIR}/base_sensor.py"
     cp "${PARENT_DIR}/common/logging_config.py" "${COMMON_DIR}/logging_config.py"
+    cp "${PARENT_DIR}/common/check_dependencies.py" "${COMMON_DIR}/check_dependencies.py"
     
-    echo -e "Copied sensor files from project to ${INSTALL_DIR}"
-}
-
-# Create installation directory
-echo -e "Creating installation directory..."
-mkdir -p "${INSTALL_DIR}"
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Failed to create directory ${INSTALL_DIR}${NC}"
-    exit 1
+    # Set permissions for common files
+    chmod 644 "${COMMON_DIR}"/*.py
+    
+    echo -e "Copied common files to ${COMMON_DIR}"
+else
+    echo -e "Common directory already exists, skipping common files installation"
 fi
 
-# Create plugin files
-echo -e "Creating plugin files..."
-copy_plugin_json
-copy_sensor_files
+# Copy plugin-specific files
+echo -e "Copying plugin-specific files..."
+cp "${SCRIPT_DIR}/plugin.json" "${PLUGIN_DIR}/plugin.json"
+cp "${SCRIPT_DIR}/sensor.py" "${PLUGIN_DIR}/sensor.py"
+touch "${PLUGIN_DIR}/__init__.py"
 
 # Set permissions
 echo -e "Setting permissions..."
-chmod 755 "${INSTALL_DIR}/sensor.py"
-chmod 644 "${INSTALL_DIR}/plugin.json"
-chmod 644 "${INSTALL_DIR}/common"/*.py
+chmod 755 "${PLUGIN_DIR}/sensor.py"
+chmod 644 "${PLUGIN_DIR}/plugin.json"
 
 # Check dependencies
 echo -e "Checking if dependencies are already installed..."
@@ -172,11 +180,11 @@ Description=Instana ${PROCESS_NAME} Sensor
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 ${INSTALL_DIR}/sensor.py
+ExecStart=/usr/bin/python3 ${PLUGIN_DIR}/sensor.py
 Restart=always
 User=root
 Environment=PYTHONUNBUFFERED=1
-Environment="PYTHONPATH=${INSTALL_DIR}"
+Environment="PYTHONPATH=${BASE_DIR}"
 
 [Install]
 WantedBy=multi-user.target
@@ -197,9 +205,9 @@ else
     echo -e "${YELLOW}Non-root installation detected. To run the sensor without root:${NC}"
     echo -e "1. Create a user-level systemd service in ~/.config/systemd/user/"
     echo -e "2. Or use cron to schedule the sensor:"
-    echo -e "   * * * * * env PYTHONPATH=${INSTALL_DIR} python3 ${INSTALL_DIR}/sensor.py --run-once"
+    echo -e "   * * * * * env PYTHONPATH=${BASE_DIR} python3 ${PLUGIN_DIR}/sensor.py --run-once"
     echo -e "3. Or run manually with:"
-    echo -e "   env PYTHONPATH=${INSTALL_DIR} python3 ${INSTALL_DIR}/sensor.py"
+    echo -e "   env PYTHONPATH=${BASE_DIR} python3 ${PLUGIN_DIR}/sensor.py"
     
     # Create a sample user-level systemd service file
     USER_SERVICE_DIR="$HOME/.config/systemd/user"
@@ -215,10 +223,10 @@ Description=Instana ${PROCESS_NAME} Sensor (User Service)
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 ${INSTALL_DIR}/sensor.py
+ExecStart=/usr/bin/python3 ${PLUGIN_DIR}/sensor.py
 Restart=always
 Environment=PYTHONUNBUFFERED=1
-Environment="PYTHONPATH=${INSTALL_DIR}"
+Environment="PYTHONPATH=${BASE_DIR}"
 
 [Install]
 WantedBy=default.target
@@ -230,8 +238,10 @@ EOF
 fi
 
 echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin installed successfully!${NC}"
-echo -e "Installation directory: ${INSTALL_DIR}"
-echo -e "\nTo test the plugin, run: ${INSTALL_DIR}/sensor.py --run-once --log-level=DEBUG"
+echo -e "Base installation directory: ${BASE_DIR}"
+echo -e "Plugin directory: ${PLUGIN_DIR}"
+echo -e "Common directory: ${COMMON_DIR}"
+echo -e "\nTo test the plugin, run: PYTHONPATH=${BASE_DIR} ${PLUGIN_DIR}/sensor.py --run-once --log-level=DEBUG"
 
 if [ "$EUID" -eq 0 ]; then
     echo -e "To check the service status, run: systemctl status ${SERVICE_NAME}.service"
