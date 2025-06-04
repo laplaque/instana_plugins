@@ -314,6 +314,7 @@ class InstanaOTelConnector:
                 "nonvoluntary_ctx_switches": "Number of non-voluntary context switches"
             }
             
+            # In newer OpenTelemetry versions, we need to use callbacks differently
             # Create an observable gauge for each expected metric
             for metric_name in expected_metrics:
                 # Use specific description if available, otherwise use generic
@@ -321,32 +322,48 @@ class InstanaOTelConnector:
                     metric_name, f"Metric for {metric_name}"
                 )
                 
-                # Create and register the observable gauge with its own callback
-                self.meter.create_observable_gauge(
+                # First create the observable gauge
+                gauge = self.meter.create_observable_gauge(
                     name=metric_name,
                     description=description,
-                    callback=self._create_metric_callback(metric_name),
                     unit="1"
                 )
+                
+                # Define a callback for this specific metric
+                def callback_wrapper(metric_name):
+                    def callback():
+                        result = {}
+                        if metric_name in self._metrics_state:
+                            result = {0: self._metrics_state[metric_name]}
+                        return result
+                    return callback
+                
+                # Register the callback with the gauge
+                gauge.observe(callback_wrapper(metric_name))
+                
                 # Add to registry for tracking
                 self._metrics_registry.add(metric_name)
                 logger.debug(f"Registered observable metric: {metric_name}")
                 
             # Also create a general callback for any metrics not in the expected list
             # This allows handling of dynamic or unexpected metrics
-            def general_callback(observer):
+            def general_callback():
+                result = {}
+                count = 0
                 for name, value in self._metrics_state.items():
                     if name not in expected_metrics and isinstance(value, (int, float)):
-                        observer.observe(value, {"metric_name": name})
+                        result[count] = value
+                        count += 1
                         logger.debug(f"Observed general metric {name}={value}")
+                return result
             
             # Register a general observable gauge for unexpected metrics
-            self.meter.create_observable_gauge(
+            general_gauge = self.meter.create_observable_gauge(
                 name=f"{self.service_name}.general_metrics",
                 description=f"General metrics for {self.service_name}",
-                callback=general_callback,
                 unit="1"
             )
+            general_gauge.observe(general_callback)
             
             logger.info(f"Registered {len(expected_metrics)} individual observable metrics for {self.service_name}")
         except Exception as e:

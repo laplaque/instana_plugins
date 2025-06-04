@@ -167,8 +167,10 @@ class TestInstanaOTelConnector(unittest.TestCase):
             agent_port=1234
         )
         
-        # Mock the meter
+        # Mock the meter and gauge
         connector.meter = MagicMock()
+        mock_gauge = MagicMock()
+        connector.meter.create_observable_gauge.return_value = mock_gauge
         
         # Call register_observable_metrics
         connector._register_observable_metrics()
@@ -183,6 +185,10 @@ class TestInstanaOTelConnector(unittest.TestCase):
         # Verify the number of calls to create_observable_gauge
         # +1 for the general metrics gauge
         self.assertEqual(connector.meter.create_observable_gauge.call_count, 
+                         len(expected_metrics) + 1)
+        
+        # Verify observe was called for each gauge (same number as create_observable_gauge)
+        self.assertEqual(mock_gauge.observe.call_count, 
                          len(expected_metrics) + 1)
         
         # Verify metrics were added to registry
