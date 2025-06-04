@@ -108,11 +108,6 @@ class TestInstanaOTelConnector(unittest.TestCase):
             agent_port=1234
         )
         
-        # Mock meter and gauge
-        connector.meter = MagicMock()
-        mock_gauge = MagicMock()
-        connector.meter.create_gauge.return_value = mock_gauge
-        
         # Test with numeric metrics
         metrics = {
             "cpu_usage": 10.5,
@@ -121,13 +116,10 @@ class TestInstanaOTelConnector(unittest.TestCase):
         }
         connector.record_metrics(metrics)
         
-        # Verify gauge creation and recording
-        self.assertEqual(connector.meter.create_gauge.call_count, 3)
-        self.assertEqual(mock_gauge.record.call_count, 3)
-        
-        # Reset mock counts for the next test
-        connector.meter.create_gauge.reset_mock()
-        mock_gauge.record.reset_mock()
+        # Verify metrics state was updated
+        self.assertEqual(connector._metrics_state["cpu_usage"], 10.5)
+        self.assertEqual(connector._metrics_state["memory_usage"], 20.3)
+        self.assertEqual(connector._metrics_state["process_count"], 3)
         
         # Test with string metrics
         metrics = {
@@ -136,10 +128,9 @@ class TestInstanaOTelConnector(unittest.TestCase):
         }
         connector.record_metrics(metrics)
         
-        # Verify gauge creation and recording (only for numeric string)
-        # Only one numeric string should be processed
-        self.assertEqual(connector.meter.create_gauge.call_count, 1)
-        self.assertEqual(mock_gauge.record.call_count, 1)
+        # Verify metrics state was updated for numeric string
+        self.assertEqual(connector._metrics_state["cpu_usage"], 10.5)
+        self.assertNotIn("non_numeric", connector._metrics_state)
 
     @patch.object(InstanaOTelConnector, '_setup_tracing')
     @patch.object(InstanaOTelConnector, '_setup_metrics')
@@ -166,6 +157,38 @@ class TestInstanaOTelConnector(unittest.TestCase):
         )
         self.assertEqual(span, mock_span)
 
+    @patch.object(InstanaOTelConnector, '_setup_tracing')
+    def test_register_observable_metrics(self, mock_setup_tracing):
+        """Test registering observable metrics."""
+        # Create connector with mocked meter
+        connector = InstanaOTelConnector(
+            service_name="test_service",
+            agent_host="test_host",
+            agent_port=1234
+        )
+        
+        # Mock the meter
+        connector.meter = MagicMock()
+        
+        # Call register_observable_metrics
+        connector._register_observable_metrics()
+        
+        # Verify create_observable_gauge was called for each expected metric
+        expected_metrics = [
+            "cpu_usage", "memory_usage", "process_count", "disk_read_bytes", 
+            "disk_write_bytes", "open_file_descriptors", "thread_count",
+            "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
+        ]
+        
+        # Verify the number of calls to create_observable_gauge
+        # +1 for the general metrics gauge
+        self.assertEqual(connector.meter.create_observable_gauge.call_count, 
+                         len(expected_metrics) + 1)
+        
+        # Verify metrics were added to registry
+        for metric in expected_metrics:
+            self.assertIn(metric, connector._metrics_registry)
+    
     @patch.object(InstanaOTelConnector, '_setup_tracing')
     @patch.object(InstanaOTelConnector, '_setup_metrics')
     def test_shutdown(self, mock_setup_metrics, mock_setup_tracing):

@@ -1,5 +1,16 @@
 # Release Notes
 
+## Version 0.0.14 (2025-06-04)
+
+### fix: Fixed OpenTelemetry metric recording with ObservableGauge
+
+- Fixed `'_Gauge' object has no attribute 'record'` error in OpenTelemetry metrics
+- Replaced `Gauge.record()` with individual `ObservableGauge` metrics and callbacks
+- Each metric now has its own ObservableGauge for better visualization in Instana
+- Added proper descriptions for each metric type
+- Improved error handling for non-numeric metrics
+- Enhanced debugging for metric observation and recording
+
 ## Version 0.0.13 (2025-06-02)
 
 ### feat: Installation testing and process simplification

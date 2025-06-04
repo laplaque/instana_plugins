@@ -84,6 +84,11 @@ class InstanaOTelConnector:
             client_cert_path: Path to client certificate file for TLS authentication (optional)
             client_key_path: Path to client key file for TLS authentication (optional)
         """
+        # Add a metrics state dictionary to store current metric values
+        self._metrics_state = {}
+        
+        # Add a registry to track registered metrics
+        self._metrics_registry = set()
         # Get configuration from environment variables or use provided values
         self.service_name = service_name
         self.agent_host = agent_host or os.environ.get('INSTANA_AGENT_HOST', 'localhost')
@@ -255,14 +260,101 @@ class InstanaOTelConnector:
                 self.service_name,
                 schema_url="https://opentelemetry.io/schemas/1.11.0"
             )
+            
+            # Register the metrics callback
+            self._register_observable_metrics()
+            
             logger.debug(f"Metrics setup completed for {self.service_name}")
         except Exception as e:
             logger.error(f"Error setting up metrics: {e}")
             raise
+            
+    def _create_metric_callback(self, metric_name):
+        """Create a callback function for a specific metric.
+        
+        Args:
+            metric_name: The name of the metric this callback will observe
+            
+        Returns:
+            A callback function for the observable gauge
+        """
+        def callback(observer):
+            try:
+                if metric_name in self._metrics_state:
+                    observer.observe(self._metrics_state[metric_name])
+                    logger.debug(f"Observed metric {metric_name}={self._metrics_state[metric_name]}")
+            except Exception as e:
+                logger.error(f"Error in metric callback for {metric_name}: {e}")
+        return callback
+    
+    def _register_observable_metrics(self):
+        """Register individual observable metrics with OpenTelemetry."""
+        if not hasattr(self, 'meter') or not self.meter:
+            logger.error("Cannot register metrics: Meter not initialized")
+            return
+            
+        try:
+            # Define the metrics we expect to collect
+            expected_metrics = [
+                "cpu_usage", "memory_usage", "process_count", "disk_read_bytes", 
+                "disk_write_bytes", "open_file_descriptors", "thread_count",
+                "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
+            ]
+            
+            # Add any metric-specific descriptions
+            metric_descriptions = {
+                "cpu_usage": "CPU usage as percentage",
+                "memory_usage": "Memory usage as percentage",
+                "process_count": "Number of processes",
+                "disk_read_bytes": "Bytes read from disk",
+                "disk_write_bytes": "Bytes written to disk",
+                "open_file_descriptors": "Number of open file descriptors",
+                "thread_count": "Number of threads",
+                "voluntary_ctx_switches": "Number of voluntary context switches",
+                "nonvoluntary_ctx_switches": "Number of non-voluntary context switches"
+            }
+            
+            # Create an observable gauge for each expected metric
+            for metric_name in expected_metrics:
+                # Use specific description if available, otherwise use generic
+                description = metric_descriptions.get(
+                    metric_name, f"Metric for {metric_name}"
+                )
+                
+                # Create and register the observable gauge with its own callback
+                self.meter.create_observable_gauge(
+                    name=metric_name,
+                    description=description,
+                    callback=self._create_metric_callback(metric_name),
+                    unit="1"
+                )
+                # Add to registry for tracking
+                self._metrics_registry.add(metric_name)
+                logger.debug(f"Registered observable metric: {metric_name}")
+                
+            # Also create a general callback for any metrics not in the expected list
+            # This allows handling of dynamic or unexpected metrics
+            def general_callback(observer):
+                for name, value in self._metrics_state.items():
+                    if name not in expected_metrics and isinstance(value, (int, float)):
+                        observer.observe(value, {"metric_name": name})
+                        logger.debug(f"Observed general metric {name}={value}")
+            
+            # Register a general observable gauge for unexpected metrics
+            self.meter.create_observable_gauge(
+                name=f"{self.service_name}.general_metrics",
+                description=f"General metrics for {self.service_name}",
+                callback=general_callback,
+                unit="1"
+            )
+            
+            logger.info(f"Registered {len(expected_metrics)} individual observable metrics for {self.service_name}")
+        except Exception as e:
+            logger.error(f"Error registering observable metrics: {e}")
         
     def record_metrics(self, metrics: Dict[str, Any]):
         """
-        Record metrics using OpenTelemetry.
+        Update the metrics state with new values.
         
         Args:
             metrics: Dictionary of metrics to record
@@ -276,31 +368,23 @@ class InstanaOTelConnector:
             return
             
         try:
-            # Create counters and gauges for each metric
+            # Update the metrics state dictionary with new values
+            metrics_updated = 0
             for name, value in metrics.items():
                 if isinstance(value, (int, float)):
-                    # Use gauge for numeric values
-                    gauge = self.meter.create_gauge(
-                        name=name,
-                        description=f"Gauge metric for {name}",
-                        unit="1"
-                    )
-                    gauge.record(value)
-                    logger.debug(f"Recorded metric {name}={value}")
+                    self._metrics_state[name] = value
+                    metrics_updated += 1
+                    logger.debug(f"Updated metric state {name}={value}")
                 elif isinstance(value, str) and value.isdigit():
                     # Try to convert string numbers
-                    gauge = self.meter.create_gauge(
-                        name=name,
-                        description=f"Gauge metric for {name}",
-                        unit="1"
-                    )
-                    gauge.record(float(value))
-                    logger.debug(f"Recorded metric {name}={value}")
+                    self._metrics_state[name] = float(value)
+                    metrics_updated += 1
+                    logger.debug(f"Updated metric state {name}={value}")
                 else:
                     # Skip non-numeric metrics
                     logger.debug(f"Skipping non-numeric metric: {name}={value}")
-                    
-            logger.debug(f"Recorded {len(metrics)} metrics for {self.service_name}")
+            
+            logger.debug(f"Updated {metrics_updated} metrics for {self.service_name}")
         except Exception as e:
             logger.error(f"Error recording metrics: {e}")
             
