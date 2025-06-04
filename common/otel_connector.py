@@ -315,31 +315,30 @@ class InstanaOTelConnector:
             }
             
             # In newer OpenTelemetry versions, we need to use callbacks differently
-            # Create an observable gauge for each expected metric
+            # Create callbacks for each metric
+            callbacks = {}
             for metric_name in expected_metrics:
                 # Use specific description if available, otherwise use generic
                 description = metric_descriptions.get(
                     metric_name, f"Metric for {metric_name}"
                 )
                 
-                # First create the observable gauge
+                # Define a callback for this specific metric - capturing the metric_name in the closure
+                def create_callback(metric_name=metric_name):  # Default argument to capture current value
+                    def callback(options):
+                        if metric_name in self._metrics_state:
+                            value = self._metrics_state[metric_name]
+                            options.observe(value)
+                            logger.debug(f"Observed metric {metric_name}={value}")
+                    return callback
+                
+                # Create the observable gauge with the callback
                 gauge = self.meter.create_observable_gauge(
                     name=metric_name,
                     description=description,
-                    unit="1"
+                    unit="1",
+                    callbacks=[create_callback()]
                 )
-                
-                # Define a callback for this specific metric
-                def callback_wrapper(metric_name):
-                    def callback():
-                        result = {}
-                        if metric_name in self._metrics_state:
-                            result = {0: self._metrics_state[metric_name]}
-                        return result
-                    return callback
-                
-                # Register the callback with the gauge
-                gauge.observe(callback_wrapper(metric_name))
                 
                 # Add to registry for tracking
                 self._metrics_registry.add(metric_name)
@@ -347,23 +346,19 @@ class InstanaOTelConnector:
                 
             # Also create a general callback for any metrics not in the expected list
             # This allows handling of dynamic or unexpected metrics
-            def general_callback():
-                result = {}
-                count = 0
+            def general_callback(options):
                 for name, value in self._metrics_state.items():
                     if name not in expected_metrics and isinstance(value, (int, float)):
-                        result[count] = value
-                        count += 1
+                        options.observe(value, {"metric_name": name})
                         logger.debug(f"Observed general metric {name}={value}")
-                return result
             
             # Register a general observable gauge for unexpected metrics
             general_gauge = self.meter.create_observable_gauge(
                 name=f"{self.service_name}.general_metrics",
                 description=f"General metrics for {self.service_name}",
-                unit="1"
+                unit="1",
+                callbacks=[general_callback]
             )
-            general_gauge.observe(general_callback)
             
             logger.info(f"Registered {len(expected_metrics)} individual observable metrics for {self.service_name}")
         except Exception as e:
