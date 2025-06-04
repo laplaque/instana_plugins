@@ -5,7 +5,7 @@
 # Copyright (c) 2025 laplaque/instana_plugins Contributors
 #
 # This file is part of the Instana Plugins collection.
-# Version: 0.0.14
+# Version: 0.0.15
 #
 
 # M8PrcSvr Instana Plugin Installer
