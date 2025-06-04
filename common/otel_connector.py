@@ -315,8 +315,6 @@ class InstanaOTelConnector:
             }
             
             # In newer OpenTelemetry versions, we need to use callbacks differently
-            # Create callbacks for each metric
-            callbacks = {}
             for metric_name in expected_metrics:
                 # Use specific description if available, otherwise use generic
                 description = metric_descriptions.get(
@@ -359,6 +357,9 @@ class InstanaOTelConnector:
                 unit="1",
                 callbacks=[general_callback]
             )
+            
+            # Add the general gauge name to the metrics registry
+            self._metrics_registry.add(f"{self.service_name}.general_metrics")
             
             logger.info(f"Registered {len(expected_metrics)} individual observable metrics for {self.service_name}")
         except Exception as e:
