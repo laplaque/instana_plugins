@@ -215,26 +215,16 @@ class TestLoggingConfig(unittest.TestCase):
     
     def test_file_handler_creation_error(self):
         """Test that setup_logging continues even when file handler creation fails."""
-        # The test is checking for fallback behavior when file handler creation fails
+        # Create a mock that raises an exception when called
+        def mock_handler(*args, **kwargs):
+            raise PermissionError("Permission denied")
         
-        # Get the console handler count before the test
-        console_handlers_before = len([h for h in logging.root.handlers if isinstance(h, logging.StreamHandler)])
+        # Ensure we start with a clean slate
+        logging.root.handlers = []
         
-        # Store the original handler creation function and its type
-        original_handler_class = logging.handlers.RotatingFileHandler
-        
-        try:
-            # Create a mock that raises an exception
-            def mock_handler(*args, **kwargs):
-                raise PermissionError("Permission denied")
-                
-            # Replace the original handler with our mock
-            logging.handlers.RotatingFileHandler = mock_handler
-            
-            # Ensure we start with a clean slate
-            logging.root.handlers = []
-            
-            # Now call setup_logging with a log file that will trigger the error
+        # Use patch as a context manager for safer patching and automatic restoration
+        with patch('logging.handlers.RotatingFileHandler', new=mock_handler):
+            # Call setup_logging with a log file that will trigger the error
             setup_logging(log_file=self.log_file)
             
             # Check that we have at least one handler still (the console)
@@ -246,17 +236,11 @@ class TestLoggingConfig(unittest.TestCase):
             
             # We can't check for specific handler counts as there might be other handlers
             # The important thing is that we have at least one StreamHandler and no file handlers
-            # Let's log what handlers we have to help debug
             handler_types = [h.__class__.__name__ for h in logging.root.handlers]
             
             # We should have at least one StreamHandler
-            stream_handlers = [h for h in logging.root.handlers if isinstance(h, logging.StreamHandler)]
             self.assertTrue(len(stream_handlers) > 0, 
                            f"Should have at least one StreamHandler. Found handlers: {handler_types}")
-            
-        finally:
-            # Always restore the original handler
-            logging.handlers.RotatingFileHandler = original_handler_class
 
 if __name__ == '__main__':
     unittest.main()
