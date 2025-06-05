@@ -301,11 +301,16 @@ class InstanaOTelConnector:
             logger.error(f"Error setting up metrics: {e}")
             raise
             
-    def _create_metric_callback(self, metric_name):
+    def _create_metric_callback(self, metric_name, is_percentage=False, is_counter=False, 
+                               decimal_places=2, display_name=None):
         """Create a generator callback function for a specific metric.
 
         Args:
             metric_name: The name of the metric this callback will observe
+            is_percentage: Whether the metric is a percentage
+            is_counter: Whether the metric is a counter
+            decimal_places: Number of decimal places to round to
+            display_name: Optional display name for logging
 
         Returns:
             A generator callback function that yields Observation objects for the observable gauge
@@ -314,9 +319,22 @@ class InstanaOTelConnector:
             try:
                 if metric_name in self._metrics_state:
                     value = self._metrics_state[metric_name]
+                    
+                    # Format the value if formatting parameters are provided
+                    if any([is_percentage, is_counter, decimal_places != 2]):
+                        value = self._metadata_store.format_metric_value(
+                            value, 
+                            is_percentage=is_percentage, 
+                            is_counter=is_counter,
+                            decimal_places=decimal_places
+                        )
+                    
                     # Yield an Observation object as required by OpenTelemetry API
                     yield Observation(value)
-                    logger.debug(f"Observed metric {metric_name}={value}")
+                    
+                    # Use the provided display name or the metric name for logging
+                    log_name = display_name or metric_name
+                    logger.debug(f"Observed metric {log_name}={value}")
             except Exception as e:
                 logger.error(f"Error in metric callback for {metric_name}: {e}")
         return callback
@@ -405,33 +423,19 @@ class InstanaOTelConnector:
                         metric_name, f"Metric for {display_name}"
                     )
                     
-                    # Define a callback for this specific metric - capturing the metric_name in the closure
-                    def create_callback(metric_name=metric_name, is_percentage=is_percentage, is_counter=is_counter):
-                        def callback(options):
-                            # options parameter is the ObservableCallbackOptions from OpenTelemetry API
-                            if metric_name in self._metrics_state:
-                                value = self._metrics_state[metric_name]
-                                
-                                # Format the value (convert to percentage if needed, use integer for counters)
-                                value = self._metadata_store.format_metric_value(
-                                    value, 
-                                    is_percentage=is_percentage, 
-                                    is_counter=is_counter,
-                                    decimal_places=decimal_places
-                                )
-                                    
-                                # Use yield with Observation object
-                                yield Observation(value)
-                                logger.debug(f"Observed metric {display_name}={value}")
-                        return callback
-                    
                     # Create the observable gauge with the callback and proper naming
                     # Use the simple name from metadata store for better display in Instana
                     gauge = self.meter.create_observable_gauge(
                         name=self._metadata_store.get_simple_metric_name(metric_name),
                         description=description,
                         unit="%" if is_percentage else "1",
-                        callbacks=[create_callback()]
+                        callbacks=[self._create_metric_callback(
+                            metric_name, 
+                            is_percentage, 
+                            is_counter, 
+                            decimal_places, 
+                            display_name
+                        )]
                     )
                 except Exception as e:
                     logger.error(f"Error registering metric {metric_name}: {e}")
@@ -579,37 +583,19 @@ class InstanaOTelConnector:
                 is_counter=is_counter
             )
             
-            # Create callback for the new metric
-            def create_callback(name=name, is_percentage=is_percentage, is_counter=is_counter):
-                def callback(options):
-                    if name in self._metrics_state:
-                        value = self._metrics_state[name]
-                        
-                        # Check if this metric is a counter
-                        is_counter = counter_metrics.get(name, False)
-                        
-                        # Set decimal places to 0 for counters
-                        decimal_places = 0 if is_counter else 2
-                        
-                        # Format the value using the metadata store
-                        value = self._metadata_store.format_metric_value(
-                            value, 
-                            is_percentage=is_percentage, 
-                            is_counter=is_counter,
-                            decimal_places=decimal_places
-                        )
-                            
-                        yield Observation(value)
-                        logger.debug(f"Observed dynamic metric {display_name}={value}")
-                return callback
-            
             # Create the observable gauge with the callback
             gauge = self.meter.create_observable_gauge(
                 # Use simple metric name from metadata store for display in Instana
                 name=self._metadata_store.get_simple_metric_name(name),
                 description=f"Metric for {display_name}",
                 unit="%" if is_percentage else "1",
-                callbacks=[create_callback()]
+                callbacks=[self._create_metric_callback(
+                    name, 
+                    is_percentage, 
+                    is_counter, 
+                    decimal_places, 
+                    display_name
+                )]
             )
             
             # Add to registry
