@@ -213,8 +213,9 @@ class TestInstanaOTelConnector(unittest.TestCase):
             "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
         ]
         
-        # Our implementation now adds 32 CPU core metrics (0-31)
-        expected_cpu_core_metrics = [f"cpu_core_{i}" for i in range(32)]
+        # Our implementation now uses the actual CPU count from the system
+        cpu_core_count = os.cpu_count() or 1  # Same approach as in the implementation
+        expected_cpu_core_metrics = [f"cpu_core_{i}" for i in range(cpu_core_count)]
         
         # All expected metrics
         expected_metrics = base_metrics + expected_cpu_core_metrics

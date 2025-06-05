@@ -335,8 +335,9 @@ class InstanaOTelConnector:
                 "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
             ]
             
-            # Add CPU core metrics to expected metrics
-            for i in range(32):  # Support up to 32 cores
+            # Add CPU core metrics to expected metrics - use system's actual CPU count
+            cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
+            for i in range(cpu_core_count):  # Support up to the actual number of cores
                 expected_metrics.append(f"cpu_core_{i}")
             
             # Define which metrics should be displayed as percentages
@@ -345,8 +346,9 @@ class InstanaOTelConnector:
                 "memory_usage": True
             }
             
-            # Add CPU core metrics to percentage metrics
-            for i in range(32):
+            # Add CPU core metrics to percentage metrics - use the same dynamic CPU count
+            cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
+            for i in range(cpu_core_count):  # Use actual CPU count instead of hardcoded value
                 percentage_metrics[f"cpu_core_{i}"] = True
             
             # Add any metric-specific descriptions
@@ -442,6 +444,18 @@ class InstanaOTelConnector:
         except Exception as e:
             logger.error(f"Error registering observable metrics: {e}")
         
+    def _register_metric_if_new(self, name: str, percentage_metrics: Dict[str, bool]):
+        """
+        Register a metric if it's not already registered.
+        
+        Args:
+            name: Name of the metric to register
+            percentage_metrics: Dictionary mapping metric names to boolean indicating if they are percentages
+        """
+        if name not in self._metrics_registry and name != "monitored_pids":
+            # Register the new metric for observation
+            self._register_new_metric(name, percentage_metrics.get(name, False))
+
     def record_metrics(self, metrics: Dict[str, Any]):
         """
         Update the metrics state with new values.
@@ -464,8 +478,9 @@ class InstanaOTelConnector:
                 "memory_usage": True
             }
             
-            # Add CPU core metrics to percentage metrics
-            for i in range(32):
+            # Add CPU core metrics to percentage metrics - use system's actual CPU count
+            cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
+            for i in range(cpu_core_count):  # Use actual CPU count instead of hardcoded value
                 percentage_metrics[f"cpu_core_{i}"] = True
                 
             # Update the metrics state dictionary with new values
@@ -477,10 +492,8 @@ class InstanaOTelConnector:
                     metrics_updated += 1
                     
                     # Check if this is a new metric that needs to be registered
-                    if name not in self._metrics_registry and name != "monitored_pids":
-                        # Register the new metric for observation
-                        self._register_new_metric(name, percentage_metrics.get(name, False))
-                        
+                    self._register_metric_if_new(name, percentage_metrics)
+                    
                     logger.debug(f"Updated metric state {name}={value}")
                 elif isinstance(value, str) and value.isdigit():
                     # Try to convert string numbers
@@ -488,10 +501,8 @@ class InstanaOTelConnector:
                     metrics_updated += 1
                     
                     # Check if this is a new metric that needs to be registered
-                    if name not in self._metrics_registry and name != "monitored_pids":
-                        # Register the new metric for observation
-                        self._register_new_metric(name, percentage_metrics.get(name, False))
-                        
+                    self._register_metric_if_new(name, percentage_metrics)
+                    
                     logger.debug(f"Updated metric state {name}={value}")
                 else:
                     # Skip non-numeric metrics
