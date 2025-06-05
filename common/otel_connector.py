@@ -420,7 +420,7 @@ class InstanaOTelConnector:
                     
                     # Use specific description if available, otherwise use generic
                     description = metric_descriptions.get(
-                        metric_name, f"Metric for {display_name}"
+                        metric_name, f"Metric for {display_name or metric_name}"
                     )
                     
                     # Create the observable gauge with the callback and proper naming
