@@ -34,8 +34,7 @@ def parse_args(description):
                         help='Metrics collection interval in seconds (default: 60)')
     parser.add_argument('--once', action='store_true',
                         help='Run once and exit (default: continuous monitoring)')
-    parser.add_argument('--otel-port', type=int, default=4317,
-                        help='Port of the Instana agent OTLP receiver (default: 4317)')
+    # Removed duplicate --otel-port flag as it duplicated --agent-port functionality
     parser.add_argument('--install-location', default='/usr/local/bin',
                         help='Installation location (default: /usr/local/bin)')
     parser.add_argument('--log-level', default='INFO',
@@ -43,9 +42,11 @@ def parse_args(description):
                         help='Set the logging level (default: INFO)')
     parser.add_argument('--log-file', 
                         help='Path to the log file (default: project_root/logs/app.log)')
+    parser.add_argument('--metadata-db-path',
+                        help='Path to the metadata database (default: ~/.instana_plugins/metadata.db)')
     return parser.parse_args()
 
-def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=60, run_once=False):
+def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=60, run_once=False, metadata_db_path=None):
     """Monitor the process and send metrics using OpenTelemetry"""
     # Initialize the OTel connector
     connector = InstanaOTelConnector(
@@ -55,7 +56,8 @@ def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=
         resource_attributes={
             "process.name": process_name,
             "host.name": os.uname()[1]
-        }
+        },
+        metadata_db_path=metadata_db_path
     )
     
     try:
@@ -128,7 +130,8 @@ def run_sensor(process_name, plugin_name, version):
             agent_host=args.agent_host,
             agent_port=args.agent_port,
             interval=args.interval,
-            run_once=True
+            run_once=True,
+            metadata_db_path=args.metadata_db_path
         )
         # resource_attributes is now passed directly in the connector initialization
         sys.exit(0 if success else 1)
@@ -138,5 +141,6 @@ def run_sensor(process_name, plugin_name, version):
             plugin_name=plugin_name,
             agent_host=args.agent_host,
             agent_port=args.agent_port,
-            interval=args.interval
+            interval=args.interval,
+            metadata_db_path=args.metadata_db_path
         )

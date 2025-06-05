@@ -1,5 +1,23 @@
 # Release Notes
 
+## Version 0.0.18 (2025-06-05)
+
+### feat: Improved OpenTelemetry metrics display and formatting
+
+- **Enhanced Display**: CPU and memory usage now consistently displayed as percentages
+- **Simplified Metric Names**: Metrics now show only the relevant portion (e.g., `cpu_usage`)
+- **Improved Service Names**: Services display only the relevant portion after "python"
+- **Proper Display Names**: Services use properly formatted display names instead of IDs
+- **Consistent Formatting**: All values are now rounded mathematically to 2 decimal places
+- **CPU Per-Core Metrics**: Added support for monitoring CPU usage per individual core
+- **Persistent Metadata**: Added SQLite-based metadata store for consistent identifiers
+- **Advanced Formatting**: Metrics are intelligently formatted based on their type
+- **Dynamic Registration**: New metrics can be automatically registered at runtime
+- Added comprehensive unit tests for the new metadata store functionality
+- Updated process monitor to collect and format per-core CPU metrics
+- Enhanced OpenTelemetry connector to work with the metadata store
+- Updated base sensor to support metadata store configuration
+
 ## Version 0.0.17 (2025-06-05)
 
 ### fix: Improved logging configuration with automatic directory creation
