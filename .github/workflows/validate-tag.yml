@@ -4,15 +4,70 @@ on:
   push:
     tags:
       - 'v*.*.*'
+    branches:
+      - main
+      - master
 
 jobs:
+  check-workflow-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      workflow_only: ${{ steps.filter.outputs.workflow_only }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Check for workflow-only changes
+        id: filter
+        run: |
+          if [ "${GITHUB_REF#refs/tags/}" != "${GITHUB_REF}" ]; then
+            # This is a tag push, we should always validate
+            echo "workflow_only=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get the files changed in the most recent commit
+          CHANGED_FILES=$(git diff --name-only HEAD HEAD~1 || git diff --name-only $(git rev-parse HEAD))
+          
+          # Check if all changed files are in .github/actions or .github/workflows
+          WORKFLOW_ONLY=true
+          for file in $CHANGED_FILES; do
+            if [[ ! "$file" =~ ^\.github/(actions|workflows)/ ]]; then
+              WORKFLOW_ONLY=false
+              break
+            fi
+          done
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo "workflow_only=$WORKFLOW_ONLY" >> $GITHUB_OUTPUT
+          
   validate-tag:
+    needs: check-workflow-changes
+    if: ${{ needs.check-workflow-changes.outputs.workflow_only != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Wait for tag to propagate
         run: |
           echo "Waiting for 30 seconds to allow tag to be pushed to origin..."
           sleep 30
+          
+      - name: Check if commit has a tag
+        id: check_tag
+        run: |
+          if [ "${GITHUB_REF#refs/tags/}" = "${GITHUB_REF}" ]; then
+            # This is not a tag push
+            COMMIT_SHA=$(git rev-parse HEAD)
+            TAG=$(git tag --points-at $COMMIT_SHA)
+            
+            if [ -z "$TAG" ]; then
+              echo "Error: Direct push to main/master branch detected without a tag."
+              echo "Please create a tag for this commit or use a pull request workflow."
+              exit 1
+            fi
+          fi
           
       - name: Checkout code
         uses: actions/checkout@v3
