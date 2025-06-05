@@ -326,6 +326,9 @@ class InstanaOTelConnector:
                 # Define a callback for this specific metric - capturing the metric_name in the closure
                 def create_callback(metric_name=metric_name):  # Default argument to capture current value
                     def callback(options):
+                        # options parameter is the ObservableCallbackOptions from OpenTelemetry API (v1.20.0+)
+                        # In previous versions this was called 'observer' and had an observe() method
+                        # Now we yield Observation objects instead
                         if metric_name in self._metrics_state:
                             value = self._metrics_state[metric_name]
                             yield Observation(value)
