@@ -538,6 +538,39 @@ class MetadataStore:
             
         return ' '.join(formatted_words)
         
+    def get_simple_metric_name(self, full_metric_name: str) -> str:
+        """
+        Extract a simple, display-friendly name from a fully qualified metric name.
+        
+        This function handles various metric naming conventions:
+        - Extracts the last component after '/'
+        - Falls back to splitting on '.' if no '/' is present
+        - Removes any {} suffixes that might be present (for parameterized metrics)
+        - Handles edge cases like empty strings
+        
+        Args:
+            full_metric_name: The fully qualified metric name
+            
+        Returns:
+            The simple metric name for display
+        """
+        if not full_metric_name:
+            return "unknown"
+            
+        # First try splitting on '/'
+        parts = full_metric_name.split('/')
+        simple_name = parts[-1] if len(parts) > 1 else full_metric_name
+        
+        # If no '/' was found, try splitting on '.'
+        if simple_name == full_metric_name and '.' in full_metric_name:
+            parts = full_metric_name.split('.')
+            simple_name = parts[-1]
+        
+        # Remove any {} suffixes (for parameterized metrics)
+        simple_name = re.sub(r'\{.*\}$', '', simple_name)
+        
+        return simple_name.strip()
+    
     def format_metric_value(
         self, 
         value: float, 

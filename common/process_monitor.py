@@ -82,9 +82,9 @@ def get_process_metrics(process_name):
         dict: A dictionary containing process metrics or None if no processes found
     """
     try:
-        # Get process information including parent PID to identify parent processes vs threads
+        # Get process information including parent PID using semicolon delimiter for robust parsing
         process_info = subprocess.check_output(
-            ["ps", "-eo", "pid,ppid,pcpu,pmem,comm", "--sort=-pcpu"],
+            ["ps", "-eo", "pid,ppid,pcpu,pmem,comm", "--sort=-pcpu", "-o", "delimiter=;"],
             stderr=subprocess.PIPE
         ).decode('utf-8')
         
@@ -101,7 +101,7 @@ def get_process_metrics(process_name):
         parent_processes = []
         
         for process in matching_processes:
-            parts = process.split()
+            parts = process.strip().split(';')
             if len(parts) < 5:  # We need at least pid, ppid, cpu, mem, comm
                 continue
                 

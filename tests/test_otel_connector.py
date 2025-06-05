@@ -206,12 +206,18 @@ class TestInstanaOTelConnector(unittest.TestCase):
         # Call register_observable_metrics
         connector._register_observable_metrics()
         
-        # Verify create_observable_gauge was called for each expected metric
-        expected_metrics = [
+        # Base expected metrics (core metrics without CPU cores)
+        base_metrics = [
             "cpu_usage", "memory_usage", "process_count", "disk_read_bytes", 
             "disk_write_bytes", "open_file_descriptors", "thread_count",
             "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
         ]
+        
+        # Our implementation now adds 32 CPU core metrics (0-31)
+        expected_cpu_core_metrics = [f"cpu_core_{i}" for i in range(32)]
+        
+        # All expected metrics
+        expected_metrics = base_metrics + expected_cpu_core_metrics
         
         # Verify the number of calls to create_observable_gauge
         # +1 for the general metrics gauge

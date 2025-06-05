@@ -400,9 +400,9 @@ class InstanaOTelConnector:
                         return callback
                     
                     # Create the observable gauge with the callback and proper naming
-                    # Use the simple name (last part after any namespaces) for better display in Instana
+                    # Use the simple name from metadata store for better display in Instana
                     gauge = self.meter.create_observable_gauge(
-                        name=metric_name.split('/')[-1],
+                        name=self._metadata_store.get_simple_metric_name(metric_name),
                         description=description,
                         unit="%" if is_percentage else "1",
                         callbacks=[create_callback()]
@@ -541,8 +541,8 @@ class InstanaOTelConnector:
             
             # Create the observable gauge with the callback
             gauge = self.meter.create_observable_gauge(
-                # Use last component of metric name for display in Instana
-                name=name.split('/')[-1],
+                # Use simple metric name from metadata store for display in Instana
+                name=self._metadata_store.get_simple_metric_name(name),
                 description=f"Metric for {display_name}",
                 unit="%" if is_percentage else "1",
                 callbacks=[create_callback()]

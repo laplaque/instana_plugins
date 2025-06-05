@@ -49,14 +49,13 @@ class TestProcessMonitor(unittest.TestCase):
     def test_get_process_metrics(self, mock_get_cpu_per_core, mock_get_ctx, mock_get_threads, 
                                 mock_get_fds, mock_get_disk_io, mock_check_output):
         """Test getting process metrics with parent processes."""
-        # Mock subprocess output with PID, PPID, CPU, MEM, COMMAND format
+        # Mock subprocess output with PID, PPID, CPU, MEM, COMMAND format using semicolon delimiter
         # 1234 is a parent process (PPID=1)
         # 5678 is a parent process (PPID=1)
         # 9012 is a child thread (PPID=1234)
-        mock_check_output.return_value = b"""  PID PPID %CPU %MEM COMMAND
-  1234    1  5.0  2.0 TestProcess
-  5678    1  3.0  1.5 TestProcess
-  9012 1234  2.0  1.0 TestProcess
+        mock_check_output.return_value = b"""1234;1;5.0;2.0;TestProcess
+5678;1;3.0;1.5;TestProcess
+9012;1234;2.0;1.0;TestProcess
 """
         # Mock other function returns
         mock_get_disk_io.return_value = (1000, 2000)
@@ -70,7 +69,7 @@ class TestProcessMonitor(unittest.TestCase):
         
         # The check_output is now called multiple times - verify it was called with the expected arguments for ps
         mock_check_output.assert_any_call(
-            ["ps", "-eo", "pid,ppid,pcpu,pmem,comm", "--sort=-pcpu"],
+            ["ps", "-eo", "pid,ppid,pcpu,pmem,comm", "--sort=-pcpu", "-o", "delimiter=;"],
             stderr=subprocess.PIPE
         )
         
@@ -89,10 +88,9 @@ class TestProcessMonitor(unittest.TestCase):
     @patch('common.process_monitor.subprocess.check_output')
     def test_get_process_metrics_no_match(self, mock_check_output):
         """Test getting process metrics with no matching processes."""
-        # Mock subprocess output with no matching processes (using new column format)
-        mock_check_output.return_value = b"""  PID PPID %CPU %MEM COMMAND
-  1234    1  5.0  2.0 OtherProcess
-  5678    1  3.0  1.5 AnotherProcess
+        # Mock subprocess output with no matching processes using semicolon delimiter
+        mock_check_output.return_value = b"""1234;1;5.0;2.0;OtherProcess
+5678;1;3.0;1.5;AnotherProcess
 """
         
         # Call function
@@ -311,13 +309,12 @@ nonvoluntary_ctxt_switches: 2000
                                            mock_get_fds, mock_get_disk_io, 
                                            mock_get_threads, mock_check_output):
         """Test separation of parent and child processes."""
-        # Mock subprocess output with complex parent-child relationships
-        mock_check_output.return_value = b"""  PID PPID %CPU %MEM COMMAND
-  1000    1  1.0  1.0 TestProcess
-  1001 1000  0.5  0.5 TestProcess
-  1002 1000  0.5  0.5 TestProcess
-  2000    1  2.0  2.0 TestProcess
-  2001 2000  1.0  1.0 TestProcess
+        # Mock subprocess output with complex parent-child relationships using semicolon delimiter
+        mock_check_output.return_value = b"""1000;1;1.0;1.0;TestProcess
+1001;1000;0.5;0.5;TestProcess
+1002;1000;0.5;0.5;TestProcess
+2000;1;2.0;2.0;TestProcess
+2001;2000;1.0;1.0;TestProcess
 """
         # Mock function returns
         mock_get_threads.side_effect = [5, 3]  # 5 for PID 1000, 3 for PID 2000
