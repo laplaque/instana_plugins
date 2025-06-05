@@ -158,6 +158,37 @@ class TestInstanaOTelConnector(unittest.TestCase):
         self.assertEqual(span, mock_span)
 
     @patch.object(InstanaOTelConnector, '_setup_tracing')
+    def test_create_metric_callback_generator(self, mock_setup_tracing):
+        """Test that _create_metric_callback correctly produces a generator that yields values."""
+        # Create connector
+        connector = InstanaOTelConnector(
+            service_name="test_service",
+            agent_host="test_host",
+            agent_port=1234
+        )
+        
+        # Add metrics to the state
+        connector._metrics_state = {
+            "test_metric": 42.0,
+            "another_metric": 99.5
+        }
+        
+        # Create callback for a metric that exists in the state
+        callback = connector._create_metric_callback("test_metric")
+        
+        # Call the callback with a mock options object
+        mock_options = MagicMock()
+        result = list(callback(mock_options))
+        
+        # Verify the callback yielded a value (we can't check the exact type due to mocking)
+        self.assertEqual(len(result), 1)
+        
+        # Test callback for metric not in state (should yield nothing)
+        callback = connector._create_metric_callback("non_existent_metric")
+        result = list(callback(mock_options))
+        self.assertEqual(len(result), 0)
+
+    @patch.object(InstanaOTelConnector, '_setup_tracing')
     def test_register_observable_metrics(self, mock_setup_tracing):
         """Test registering observable metrics."""
         # Create connector with mocked meter

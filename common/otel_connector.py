@@ -45,7 +45,7 @@ try:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-    from opentelemetry.metrics import set_meter_provider, get_meter_provider
+    from opentelemetry.metrics import set_meter_provider, get_meter_provider, Observation
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:
     logger.error("OpenTelemetry packages not found. Please install required dependencies.")
@@ -270,19 +270,21 @@ class InstanaOTelConnector:
             raise
             
     def _create_metric_callback(self, metric_name):
-        """Create a callback function for a specific metric.
-        
+        """Create a generator callback function for a specific metric.
+
         Args:
             metric_name: The name of the metric this callback will observe
-            
+
         Returns:
-            A callback function for the observable gauge
+            A generator callback function that yields Observation objects for the observable gauge
         """
-        def callback(observer):
+        def callback(options):
             try:
                 if metric_name in self._metrics_state:
-                    observer.observe(self._metrics_state[metric_name])
-                    logger.debug(f"Observed metric {metric_name}={self._metrics_state[metric_name]}")
+                    value = self._metrics_state[metric_name]
+                    # Yield an Observation object as required by OpenTelemetry API
+                    yield Observation(value)
+                    logger.debug(f"Observed metric {metric_name}={value}")
             except Exception as e:
                 logger.error(f"Error in metric callback for {metric_name}: {e}")
         return callback
@@ -324,9 +326,13 @@ class InstanaOTelConnector:
                 # Define a callback for this specific metric - capturing the metric_name in the closure
                 def create_callback(metric_name=metric_name):  # Default argument to capture current value
                     def callback(options):
+                        # options parameter is the ObservableCallbackOptions from OpenTelemetry API (v1.20.0+)
+                        # In previous versions this was called 'observer' and had an observe() method
+                        # Now we yield Observation objects instead
                         if metric_name in self._metrics_state:
                             value = self._metrics_state[metric_name]
-                            options.observe(value)
+                            # Use yield with Observation object as required by OpenTelemetry API 1.20.0+
+                            yield Observation(value)
                             logger.debug(f"Observed metric {metric_name}={value}")
                     return callback
                 
@@ -347,7 +353,11 @@ class InstanaOTelConnector:
             def general_callback(options):
                 for name, value in self._metrics_state.items():
                     if name not in expected_metrics and isinstance(value, (int, float)):
-                        options.observe(value, {"metric_name": name})
+                        # Yield Observation with metric metadata for dynamic metrics
+                        # The "metric_name" attribute helps identify the source in Instana
+                        # This metadata structure is used by Instana to correlate metrics with their source
+                        # and is required for proper identification of dynamic metrics in the Instana UI
+                        yield Observation(value, {"metric_name": name})
                         logger.debug(f"Observed general metric {name}={value}")
             
             # Register a general observable gauge for unexpected metrics

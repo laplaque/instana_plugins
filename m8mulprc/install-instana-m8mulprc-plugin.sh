@@ -5,7 +5,6 @@
 # Copyright (c) 2025 laplaque/instana_plugins Contributors
 #
 # This file is part of the Instana Plugins collection.
-# Version: 0.0.15
 #
 
 # M8MulPrc Instana Plugin Installer
@@ -30,6 +29,9 @@ trap cleanup ERR
 # Define script directories early
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( dirname "$SCRIPT_DIR" )"
+
+# Source the shared version extraction script
+source "${PARENT_DIR}/common/extract_version.sh"
 
 # Default installation directories
 DEFAULT_BASE_DIR="/opt/instana_plugins"
@@ -79,7 +81,7 @@ done
 PLUGIN_DIR="${BASE_DIR}/${PLUGIN_DIR_NAME}"
 COMMON_DIR="${BASE_DIR}/common"
 
-echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin Installer${NC}"
+echo -e "${GREEN}MicroStrategy ${PROCESS_NAME} Instana Plugin Installer (v${VERSION})${NC}"
 echo -e "Base installation directory: ${BASE_DIR}"
 echo -e "Plugin directory: ${PLUGIN_DIR}"
 echo -e "Common directory: ${COMMON_DIR}"
