@@ -6,15 +6,31 @@ def _resolve_log_file_path(log_file=None):
     """
     Resolve the log file path, creating any necessary directories.
     
+    This function:
+    1. Determines the appropriate log file path (default or custom)
+    2. Creates any missing directories in the path
+    3. Returns the absolute path to the log file
+    
     Args:
         log_file: Path to the log file (default: None, which will use project_root/logs/app.log)
         
     Returns:
         Absolute path to the log file
+        
+    Examples:
+        >>> _resolve_log_file_path()
+        '/path/to/project/logs/app.log'
+        
+        >>> _resolve_log_file_path('/custom/path/app.log')
+        '/custom/path/app.log'
+        
+    Raises:
+        PermissionError: If directory creation fails due to permissions
+        OSError: If directory creation fails for other reasons
     """
     # Determine the default log file path if not provided
     if log_file is None:
-        # Get the project root directory (2 levels up from this file)
+        # Get the project root directory (one level up from common/ directory)
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         log_dir = os.path.join(project_root, 'logs')
         log_file = os.path.join(log_dir, 'app.log')
