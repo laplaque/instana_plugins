@@ -68,8 +68,8 @@ def get_process_cpu_per_core(pid):
         lines = result.strip().split('\n')
         
         for line in lines:
-            if pid in line:
-                parts = line.split()
+            parts = line.split()
+            if len(parts) >= 3 and parts[2] == pid:  # Ensure the line has enough fields and matches the PID
                 if len(parts) >= 8:  # Format: Time|UID|PID|%usr|%system|%guest|%wait|%CPU|CPU
                     core_id = parts[-1]
                     cpu_usage = float(parts[-2])
