@@ -40,7 +40,18 @@ class MetadataStore:
             # Create db in a .instana_plugins directory in the user's home
             home_dir = os.path.expanduser("~")
             db_dir = os.path.join(home_dir, ".instana_plugins")
-            os.makedirs(db_dir, exist_ok=True)
+            
+            # Ensure the directory exists
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+                logger.debug(f"Ensuring metadata directory exists: {db_dir}")
+            except OSError as e:
+                logger.warning(f"Could not create metadata directory {db_dir}: {e}")
+                # Fall back to a temporary directory if we can't create the intended one
+                import tempfile
+                db_dir = tempfile.gettempdir()
+                logger.warning(f"Using temporary directory instead: {db_dir}")
+                
             db_path = os.path.join(db_dir, "metadata.db")
             
         self.db_path = db_path
@@ -61,6 +72,8 @@ class MetadataStore:
                 id TEXT PRIMARY KEY,
                 full_name TEXT UNIQUE,
                 display_name TEXT,
+                version TEXT,
+                description TEXT,
                 first_seen TIMESTAMP,
                 last_seen TIMESTAMP
             )
@@ -117,12 +130,14 @@ class MetadataStore:
             logger.error(f"Error initializing database: {e}")
             raise
             
-    def get_or_create_service(self, full_name: str) -> Tuple[str, str]:
+    def get_or_create_service(self, full_name: str, version: str = "", description: str = "") -> Tuple[str, str]:
         """
         Get existing service ID or create a new one if it doesn't exist.
         
         Args:
             full_name: Full service name (e.g., com.instana.plugin.python.microstrategy_m8mulprc)
+            version: Service version (optional)
+            description: Service description (optional)
             
         Returns:
             Tuple of (service_id, display_name)
@@ -147,17 +162,30 @@ class MetadataStore:
                 # Service exists, update last_seen
                 service_id, existing_display_name = result
                 
-                # Update display name if it has changed
-                if existing_display_name != display_name:
+                # Get existing version and description if new ones aren't provided
+                if not version or not description:
                     cursor.execute(
-                        "UPDATE services SET display_name = ?, last_seen = ? WHERE id = ?",
-                        (display_name, now, service_id)
+                        "SELECT version, description FROM services WHERE id = ?",
+                        (service_id,)
                     )
-                else:
-                    cursor.execute(
-                        "UPDATE services SET last_seen = ? WHERE id = ?",
-                        (now, service_id)
-                    )
+                    existing_values = cursor.fetchone()
+                    if existing_values:
+                        existing_version, existing_description = existing_values
+                        # Use existing values if new ones aren't provided
+                        if not version:
+                            version = existing_version
+                        if not description:
+                            description = existing_description
+                
+                # Update service information
+                cursor.execute(
+                    """
+                    UPDATE services 
+                    SET display_name = ?, version = ?, description = ?, last_seen = ? 
+                    WHERE id = ?
+                    """,
+                    (display_name, version, description, now, service_id)
+                )
                 
                 conn.commit()
                 logger.debug(f"Using existing service: {full_name} (ID: {service_id})")
@@ -168,10 +196,10 @@ class MetadataStore:
                 cursor.execute(
                     """
                     INSERT INTO services 
-                    (id, full_name, display_name, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?, ?)
+                    (id, full_name, display_name, version, description, first_seen, last_seen)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (service_id, full_name, display_name, now, now)
+                    (service_id, full_name, display_name, version, description, now, now)
                 )
                 conn.commit()
                 logger.info(f"Created new service: {full_name} (ID: {service_id})")
@@ -276,6 +304,89 @@ class MetadataStore:
             display_name = self._format_metric_name(name)
             return metric_id, display_name
             
+    def get_service_info(self, service_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get information about a specific service.
+        
+        Args:
+            service_id: ID of the service
+            
+        Returns:
+            Dictionary of service information or None if not found
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                """
+                SELECT id, full_name, display_name, version, description
+                FROM services
+                WHERE id = ?
+                """,
+                (service_id,)
+            )
+            result = cursor.fetchone()
+            
+            conn.close()
+            
+            if result:
+                return {
+                    'id': result[0],
+                    'full_name': result[1],
+                    'display_name': result[2],
+                    'version': result[3],
+                    'description': result[4]
+                }
+            return None
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error in get_service_info: {e}")
+            return None
+    
+    def get_metrics_for_service(self, service_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all metrics for a specific service.
+        
+        Args:
+            service_id: ID of the service
+            
+        Returns:
+            List of metric information dictionaries
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                """
+                SELECT id, name, display_name, unit, format_type, decimal_places, is_percentage
+                FROM metrics
+                WHERE service_id = ?
+                """,
+                (service_id,)
+            )
+            results = cursor.fetchall()
+            
+            conn.close()
+            
+            return [
+                {
+                    'id': row[0],
+                    'name': row[1],
+                    'display_name': row[2],
+                    'unit': row[3],
+                    'format_type': row[4],
+                    'decimal_places': row[5],
+                    'is_percentage': bool(row[6])
+                }
+                for row in results
+            ]
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error in get_metrics_for_service: {e}")
+            return []
+    
     def get_metric_info(self, service_id: str, name: str) -> Optional[Dict[str, Any]]:
         """
         Get information about a specific metric.

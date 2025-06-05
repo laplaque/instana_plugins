@@ -18,6 +18,7 @@ from unittest.mock import patch
 # Add the parent directory to the path to import the common modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from common import VERSION
 from common.metadata_store import MetadataStore
 
 class TestMetadataStore(unittest.TestCase):
@@ -35,9 +36,15 @@ class TestMetadataStore(unittest.TestCase):
         
     def test_service_creation(self):
         """Test creating a service and retrieving its details"""
-        # Create a service
+        # Create a service with version from common/__init__.py
         service_name = "com.instana.plugin.python.microstrategy_m8mulprc"
-        service_id, display_name = self.store.get_or_create_service(service_name)
+        description = "MicroStrategy M8 Multi-purpose Process Monitor"
+        
+        service_id, display_name = self.store.get_or_create_service(
+            service_name, 
+            version=VERSION,
+            description=description
+        )
         
         # Verify the service was created correctly
         self.assertIsNotNone(service_id)
@@ -50,12 +57,59 @@ class TestMetadataStore(unittest.TestCase):
         # Get the service again - should return the same ID
         service_id2, _ = self.store.get_or_create_service(service_name)
         self.assertEqual(service_id, service_id2)
+        
+        # Get the service info and verify details
+        service_info = self.store.get_service_info(service_id)
+        self.assertIsNotNone(service_info)
+        self.assertEqual(service_name, service_info['full_name'])
+        self.assertEqual(display_name, service_info['display_name'])
+        self.assertEqual(VERSION, service_info['version'])
+        self.assertEqual(description, service_info['description'])
+    
+    def test_metrics_for_service(self):
+        """Test retrieving all metrics for a service"""
+        # Create a service
+        service_name = "com.instana.plugin.python.test_service_metrics"
+        service_id, _ = self.store.get_or_create_service(
+            service_name,
+            version=VERSION,
+            description="Test Service for Metrics"
+        )
+        
+        # Create multiple metrics
+        metrics_to_create = [
+            ("cpu_usage", "%", "percentage", 2, True),
+            ("memory_usage", "%", "percentage", 2, True),
+            ("disk_read_bytes", "bytes", "bytes", 0, False),
+            ("thread_count", "threads", "number", 0, False)
+        ]
+        
+        for name, unit, format_type, decimal_places, is_percentage in metrics_to_create:
+            self.store.get_or_create_metric(
+                service_id=service_id,
+                name=name,
+                unit=unit,
+                format_type=format_type,
+                decimal_places=decimal_places,
+                is_percentage=is_percentage
+            )
+        
+        # Get all metrics for the service
+        metrics = self.store.get_metrics_for_service(service_id)
+        
+        # Verify we got all the metrics we created
+        self.assertEqual(len(metrics_to_create), len(metrics))
+        
+        # Verify each metric has the expected fields
+        metric_names = [m['name'] for m in metrics]
+        for name, _, _, _, _ in metrics_to_create:
+            self.assertIn(name, metric_names)
     
     def test_metric_creation(self):
         """Test creating metrics and retrieving their details"""
         # Create a service first
         service_name = "com.instana.plugin.python.test_service"
-        service_id, _ = self.store.get_or_create_service(service_name)
+        service_id, _ = self.store.get_or_create_service(service_name, version=VERSION)
         
         # Create a regular metric
         metric_name = "cpu_usage"
