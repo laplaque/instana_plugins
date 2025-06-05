@@ -82,9 +82,9 @@ def get_process_metrics(process_name):
         dict: A dictionary containing process metrics or None if no processes found
     """
     try:
-        # Get process information
+        # Get process information including parent PID to identify parent processes vs threads
         process_info = subprocess.check_output(
-            ["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"],
+            ["ps", "-eo", "pid,ppid,pcpu,pmem,comm", "--sort=-pcpu"],
             stderr=subprocess.PIPE
         ).decode('utf-8')
         
@@ -92,9 +92,50 @@ def get_process_metrics(process_name):
         process_regex = re.compile(process_name, re.IGNORECASE)
         matching_processes = [line for line in process_info.split('\n') if process_regex.search(line)]
         
-        process_count = len(matching_processes)
-        if process_count == 0:
+        if not matching_processes:
             logger.warning(f"No processes found matching '{process_name}'")
+            return None
+            
+        # Parse the matching processes to identify parent processes and threads
+        process_map = {}  # pid -> {ppid, info, threads, etc.}
+        parent_processes = []
+        
+        for process in matching_processes:
+            parts = process.split()
+            if len(parts) < 5:  # We need at least pid, ppid, cpu, mem, comm
+                continue
+                
+            try:
+                pid = parts[0]
+                ppid = parts[1]
+                process_info = {
+                    'pid': pid,
+                    'ppid': ppid,
+                    'cpu': float(parts[2]),
+                    'memory': float(parts[3]),
+                    'command': parts[4],
+                    'is_parent': False  # Will set to True for parent processes
+                }
+                process_map[pid] = process_info
+            except Exception as e:
+                logger.debug(f"Error parsing process info for line: {process}, error: {e}")
+                continue
+                
+        # Identify parent processes - those whose PPID is not in our process_map
+        # or is a system process (PPID=1 typically)
+        for pid, info in process_map.items():
+            ppid = info['ppid']
+            if ppid not in process_map or ppid == '1':
+                info['is_parent'] = True
+                parent_processes.append(pid)
+                
+        # Log the detected parent processes and thread counts
+        logger.debug(f"Detected {len(parent_processes)} parent processes for {process_name}: {parent_processes}")
+        
+        # Count parent processes
+        process_count = len(parent_processes)
+        if process_count == 0:
+            logger.warning(f"No parent processes found matching '{process_name}'")
             return None
             
         # Initialize metrics
@@ -104,6 +145,7 @@ def get_process_metrics(process_name):
         total_disk_write = 0
         total_open_fds = 0
         total_threads = 0
+        parent_thread_counts = []  # Track thread counts per parent process
         total_voluntary_ctx_switches = 0
         total_nonvoluntary_ctx_switches = 0
         
@@ -114,16 +156,15 @@ def get_process_metrics(process_name):
         cpu_cores = get_cpu_cores_count()
         per_core_cpu = {f"cpu_core_{i}": 0.0 for i in range(cpu_cores)}
         
-        for process in matching_processes:
-            parts = process.split()
-            if len(parts) < 4:
-                continue
+        # Process all parent processes first
+        for pid in parent_processes:
+            info = process_map[pid]
+            process_pids.append(pid)
             
             try:
-                pid = parts[0]
-                process_pids.append(pid)
-                total_cpu += float(parts[1])
-                total_memory += float(parts[2])
+                # Add CPU and memory from parent process
+                total_cpu += info['cpu']
+                total_memory += info['memory']
                 
                 # Get disk I/O for this PID
                 read_bytes, write_bytes = get_disk_io_for_pid(pid)
@@ -134,9 +175,13 @@ def get_process_metrics(process_name):
                 open_fds = get_file_descriptor_count(pid)
                 total_open_fds += open_fds
                 
-                # Get thread count
+                # Get thread count for this parent process
                 thread_count = get_thread_count(pid)
                 total_threads += thread_count
+                parent_thread_counts.append(thread_count)
+                
+                # Log thread count for debugging
+                logger.debug(f"Process {pid} ({process_name}) has {thread_count} threads")
                 
                 # Get context switches
                 vol_ctx, nonvol_ctx = get_context_switches(pid)
@@ -162,15 +207,21 @@ def get_process_metrics(process_name):
     metrics = {
         "cpu_usage": round(total_cpu, 2),                   # Already percentage
         "memory_usage": round(total_memory, 2),             # Already percentage
-        "process_count": process_count,
+        "process_count": process_count,                     # Now only parent processes
         "disk_read_bytes": round(total_disk_read, 2),
         "disk_write_bytes": round(total_disk_write, 2),
         "open_file_descriptors": round(total_open_fds, 2),
-        "thread_count": round(total_threads, 2),
+        "thread_count": round(total_threads, 2),            # Total threads across all parent processes
         "voluntary_ctx_switches": round(total_voluntary_ctx_switches, 2),
         "nonvoluntary_ctx_switches": round(total_nonvoluntary_ctx_switches, 2),
         "monitored_pids": ",".join(process_pids)            # For debugging
     }
+    
+    # Add thread statistics if available
+    if parent_thread_counts:
+        metrics["max_threads_per_process"] = round(max(parent_thread_counts), 2)
+        metrics["min_threads_per_process"] = round(min(parent_thread_counts), 2)
+        metrics["avg_threads_per_process"] = round(sum(parent_thread_counts) / len(parent_thread_counts), 2)
     
     # Add per-core CPU metrics if available
     for core_id, usage in per_core_cpu.items():
@@ -213,19 +264,44 @@ def get_file_descriptor_count(pid):
 def get_thread_count(pid):
     """Get the number of threads for a process"""
     try:
-        # Count entries in /proc/{pid}/task directory
+        # First try to get thread count from status file as it's most reliable
+        try:
+            with open(f"/proc/{pid}/status", "r") as f:
+                status_content = f.read()
+                thread_match = re.search(r"Threads:\s+(\d+)", status_content)
+                if thread_match:
+                    thread_count = int(thread_match.group(1))
+                    logger.debug(f"Got thread count for PID {pid} from status file: {thread_count}")
+                    return thread_count
+        except (FileNotFoundError, PermissionError) as e:
+            logger.debug(f"Could not read status file for PID {pid}: {e}")
+        
+        # Fallback to counting entries in task directory
         task_dir = f"/proc/{pid}/task"
         if os.path.exists(task_dir):
-            return len(os.listdir(task_dir))
-        
-        # Alternative method using status file
-        with open(f"/proc/{pid}/status", "r") as f:
-            status_content = f.read()
-            thread_match = re.search(r"Threads:\s+(\d+)", status_content)
-            if thread_match:
-                return int(thread_match.group(1))
+            thread_count = len(os.listdir(task_dir))
+            logger.debug(f"Got thread count for PID {pid} from task directory: {thread_count}")
+            return thread_count
+            
+        # If all methods fail, try using ps command for thread count
+        try:
+            ps_result = subprocess.check_output(
+                ["ps", "-o", "nlwp", "-p", str(pid)],
+                stderr=subprocess.PIPE
+            ).decode('utf-8')
+            
+            lines = ps_result.strip().split('\n')
+            if len(lines) >= 2:  # Header + at least one line of data
+                thread_count = int(lines[1].strip())
+                logger.debug(f"Got thread count for PID {pid} from ps command: {thread_count}")
+                return thread_count
+        except Exception as e:
+            logger.debug(f"Error getting thread count from ps for PID {pid}: {e}")
+            
+        logger.warning(f"Could not determine thread count for PID {pid}")
         return 0
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Error in get_thread_count for PID {pid}: {e}")
         return 0
 
 def get_context_switches(pid):
