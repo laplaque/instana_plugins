@@ -1,5 +1,21 @@
 # Release Notes
 
+## Version 0.0.17 (2025-06-05)
+
+### fix: Improved logging configuration with automatic directory creation
+
+- Refactored logging configuration to extract log path resolution into a helper method
+- Added automatic creation of log directories if they don't exist
+- Made log file paths configurable via command-line arguments
+- Improved error handling for log file creation
+- Updated .gitignore to exclude log files but track the logs directory structure
+- Reduced code duplication in logging setup
+- Eliminated "No such file or directory" errors when writing logs
+- Improved user experience with better logging configuration
+- Enhanced maintainability through better code organization
+- Consistent logging behavior across all plugins
+- Configurable log destinations via command-line
+
 ## Version 0.0.16 (2025-06-05)
 
 ### feat: Centralized version parameter and fixed OpenTelemetry Observation yield pattern
