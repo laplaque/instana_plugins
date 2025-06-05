@@ -90,6 +90,7 @@ class MetadataStore:
                 format_type TEXT,
                 decimal_places INTEGER DEFAULT 2,
                 is_percentage BOOLEAN DEFAULT 0,
+                is_counter BOOLEAN DEFAULT 0,
                 first_seen TIMESTAMP,
                 last_seen TIMESTAMP,
                 FOREIGN KEY (service_id) REFERENCES services(id),
@@ -221,7 +222,8 @@ class MetadataStore:
         unit: str = "",
         format_type: str = "number",
         decimal_places: int = 2,
-        is_percentage: bool = False
+        is_percentage: bool = False,
+        is_counter: bool = False
     ) -> Tuple[str, str]:
         """
         Get existing metric ID or create a new one if it doesn't exist.
@@ -285,11 +287,11 @@ class MetadataStore:
                     """
                     INSERT INTO metrics 
                     (id, service_id, name, display_name, unit, format_type, 
-                     decimal_places, is_percentage, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     decimal_places, is_percentage, is_counter, first_seen, last_seen)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (metric_id, service_id, name, display_name, unit, format_type,
-                     decimal_places, is_percentage, now, now)
+                     decimal_places, is_percentage, is_counter, now, now)
                 )
                 conn.commit()
                 logger.info(f"Created new metric: {name} (ID: {metric_id})")
@@ -575,6 +577,7 @@ class MetadataStore:
         self, 
         value: float, 
         is_percentage: bool = False,
+        is_counter: bool = False,
         decimal_places: int = 2
     ) -> float:
         """
@@ -583,14 +586,19 @@ class MetadataStore:
         Args:
             value: Raw metric value
             is_percentage: Whether this metric should be displayed as a percentage
+            is_counter: Whether this metric is a counter (integer)
             decimal_places: Number of decimal places for rounding
             
         Returns:
-            Formatted value
+            Formatted value (as integer for counters, rounded float otherwise)
         """
         # Convert to percentage if required
         if is_percentage and value <= 1.0:
             value = value * 100.0
             
-        # Round to specified decimal places
+        # For counters, return as integer
+        if is_counter:
+            return int(value)
+            
+        # Otherwise round to specified decimal places
         return round(value, decimal_places)

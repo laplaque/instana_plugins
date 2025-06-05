@@ -346,6 +346,19 @@ class InstanaOTelConnector:
                 "memory_usage": True
             }
             
+            # Define which metrics are counters (should be displayed as integers)
+            counter_metrics = {
+                "process_count": True,
+                "disk_read_bytes": True,
+                "disk_write_bytes": True,
+                "open_file_descriptors": True,
+                "thread_count": True,
+                "voluntary_ctx_switches": True,
+                "nonvoluntary_ctx_switches": True,
+                "max_threads_per_process": True,
+                "min_threads_per_process": True
+            }
+            
             # Add CPU core metrics to percentage metrics - use the same dynamic CPU count
             cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
             for i in range(cpu_core_count):  # Use actual CPU count instead of hardcoded value
@@ -370,13 +383,20 @@ class InstanaOTelConnector:
                 is_percentage = percentage_metrics.get(metric_name, False)
                 
                 try:
+                    # Check if this metric is a counter
+                    is_counter = counter_metrics.get(metric_name, False)
+                    
+                    # Set decimal places to 0 for counters
+                    decimal_places = 0 if is_counter else 2
+                    
                     metric_id, display_name = self._metadata_store.get_or_create_metric(
                         service_id=self.service_id,
                         name=metric_name,
                         unit="%" if is_percentage else "",
-                        format_type="percentage" if is_percentage else "number",
-                        decimal_places=2,
-                        is_percentage=is_percentage
+                        format_type="counter" if is_counter else ("percentage" if is_percentage else "number"),
+                        decimal_places=decimal_places,
+                        is_percentage=is_percentage,
+                        is_counter=is_counter
                     )
                     
                     # Use specific description if available, otherwise use generic
@@ -385,15 +405,18 @@ class InstanaOTelConnector:
                     )
                     
                     # Define a callback for this specific metric - capturing the metric_name in the closure
-                    def create_callback(metric_name=metric_name, is_percentage=is_percentage):
+                    def create_callback(metric_name=metric_name, is_percentage=is_percentage, is_counter=is_counter):
                         def callback(options):
                             # options parameter is the ObservableCallbackOptions from OpenTelemetry API
                             if metric_name in self._metrics_state:
                                 value = self._metrics_state[metric_name]
                                 
-                                # Format the value (convert to percentage if needed, round to 2 decimals)
+                                # Format the value (convert to percentage if needed, use integer for counters)
                                 value = self._metadata_store.format_metric_value(
-                                    value, is_percentage=is_percentage, decimal_places=2
+                                    value, 
+                                    is_percentage=is_percentage, 
+                                    is_counter=is_counter,
+                                    decimal_places=decimal_places
                                 )
                                     
                                 # Use yield with Observation object
@@ -524,26 +547,55 @@ class InstanaOTelConnector:
             logger.error(f"Cannot register new metric {name}: Meter not initialized")
             return
             
+        # Define which metrics are counters
+        counter_metrics = {
+            "process_count": True,
+            "disk_read_bytes": True,
+            "disk_write_bytes": True,
+            "open_file_descriptors": True,
+            "thread_count": True,
+            "voluntary_ctx_switches": True,
+            "nonvoluntary_ctx_switches": True,
+            "max_threads_per_process": True,
+            "min_threads_per_process": True
+        }
+            
         try:
+            # Check if this metric is a counter
+            is_counter = counter_metrics.get(name, False)
+            
+            # Set decimal places to 0 for counters
+            decimal_places = 0 if is_counter else 2
+            
             # Get metric ID and display name from metadata store
             metric_id, display_name = self._metadata_store.get_or_create_metric(
                 service_id=self.service_id,
                 name=name,
                 unit="%" if is_percentage else "",
-                format_type="percentage" if is_percentage else "number",
-                decimal_places=2,
-                is_percentage=is_percentage
+                format_type="counter" if is_counter else ("percentage" if is_percentage else "number"),
+                decimal_places=decimal_places,
+                is_percentage=is_percentage,
+                is_counter=is_counter
             )
             
             # Create callback for the new metric
-            def create_callback(name=name, is_percentage=is_percentage):
+            def create_callback(name=name, is_percentage=is_percentage, is_counter=is_counter):
                 def callback(options):
                     if name in self._metrics_state:
                         value = self._metrics_state[name]
                         
+                        # Check if this metric is a counter
+                        is_counter = counter_metrics.get(name, False)
+                        
+                        # Set decimal places to 0 for counters
+                        decimal_places = 0 if is_counter else 2
+                        
                         # Format the value using the metadata store
                         value = self._metadata_store.format_metric_value(
-                            value, is_percentage=is_percentage, decimal_places=2
+                            value, 
+                            is_percentage=is_percentage, 
+                            is_counter=is_counter,
+                            decimal_places=decimal_places
                         )
                             
                         yield Observation(value)

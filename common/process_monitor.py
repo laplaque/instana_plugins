@@ -204,24 +204,25 @@ def get_process_metrics(process_name):
         return None
     
     # CPU and memory are already percentages but need to be rounded
+    # Counter metrics should be integers, not rounded floats
     metrics = {
         "cpu_usage": round(total_cpu, 2),                   # Already percentage
         "memory_usage": round(total_memory, 2),             # Already percentage
-        "process_count": process_count,                     # Now only parent processes
-        "disk_read_bytes": round(total_disk_read, 2),
-        "disk_write_bytes": round(total_disk_write, 2),
-        "open_file_descriptors": round(total_open_fds, 2),
-        "thread_count": round(total_threads, 2),            # Total threads across all parent processes
-        "voluntary_ctx_switches": round(total_voluntary_ctx_switches, 2),
-        "nonvoluntary_ctx_switches": round(total_nonvoluntary_ctx_switches, 2),
+        "process_count": int(process_count),                # Counter - should be integer
+        "disk_read_bytes": int(total_disk_read),            # Counter - should be integer
+        "disk_write_bytes": int(total_disk_write),          # Counter - should be integer
+        "open_file_descriptors": int(total_open_fds),       # Counter - should be integer
+        "thread_count": int(total_threads),                 # Counter - should be integer
+        "voluntary_ctx_switches": int(total_voluntary_ctx_switches),  # Counter - should be integer
+        "nonvoluntary_ctx_switches": int(total_nonvoluntary_ctx_switches),  # Counter - should be integer
         "monitored_pids": ",".join(process_pids)            # For debugging
     }
     
     # Add thread statistics if available
     if parent_thread_counts:
-        metrics["max_threads_per_process"] = round(max(parent_thread_counts), 2)
-        metrics["min_threads_per_process"] = round(min(parent_thread_counts), 2)
-        metrics["avg_threads_per_process"] = round(sum(parent_thread_counts) / len(parent_thread_counts), 2)
+        metrics["max_threads_per_process"] = int(max(parent_thread_counts))  # Counter - should be integer
+        metrics["min_threads_per_process"] = int(min(parent_thread_counts))  # Counter - should be integer
+        metrics["avg_threads_per_process"] = round(sum(parent_thread_counts) / len(parent_thread_counts), 2)  # Keep average as float
     
     # Add per-core CPU metrics if available
     for core_id, usage in per_core_cpu.items():

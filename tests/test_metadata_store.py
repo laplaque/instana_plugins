@@ -192,6 +192,13 @@ class TestMetadataStore(unittest.TestCase):
         
         # Test no conversion for already-percentage values over 1.0
         self.assertEqual(75.0, self.store.format_metric_value(75.0, is_percentage=True))
+        
+        # Test counter formatting (should return integers)
+        self.assertEqual(75, self.store.format_metric_value(75.123, is_counter=True))
+        self.assertEqual(76, self.store.format_metric_value(75.789, is_counter=True))
+        
+        # Test counter with percentage (percentage conversion happens first, then integer conversion)
+        self.assertEqual(75, self.store.format_metric_value(0.753, is_percentage=True, is_counter=True))
 
 if __name__ == '__main__':
     unittest.main()
