@@ -34,8 +34,7 @@ def parse_args(description):
                         help='Metrics collection interval in seconds (default: 60)')
     parser.add_argument('--once', action='store_true',
                         help='Run once and exit (default: continuous monitoring)')
-    parser.add_argument('--otel-port', type=int, default=4317,
-                        help='Port of the Instana agent OTLP receiver (default: 4317)')
+    # Removed duplicate --otel-port flag as it duplicated --agent-port functionality
     parser.add_argument('--install-location', default='/usr/local/bin',
                         help='Installation location (default: /usr/local/bin)')
     parser.add_argument('--log-level', default='INFO',

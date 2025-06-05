@@ -34,6 +34,8 @@ from common.process_monitor import (
     get_file_descriptor_count,
     get_thread_count,
     get_context_switches,
+    get_cpu_cores_count,
+    get_process_cpu_per_core,
     report_metrics
 )
 
@@ -208,10 +210,10 @@ class TestProcessMonitor(unittest.TestCase):
         mock_exists.assert_called_once_with("/proc/1234/task")
         mock_listdir.assert_called_once_with("/proc/1234/task")
 
-    @patch('builtins.open')
-    @patch('os.path.exists')
     @patch('subprocess.check_output')
-    def test_get_thread_count_fallback_to_ps(self, mock_check_output, mock_exists, mock_open):
+    @patch('os.path.exists')
+    @patch('builtins.open')
+    def test_get_thread_count_fallback_to_ps(self, mock_open, mock_exists, mock_check_output):
         """Test fallback to ps command when both other methods fail."""
         # Mock status file error
         mock_open.side_effect = FileNotFoundError("No such file")
@@ -337,6 +339,58 @@ nonvoluntary_ctxt_switches: 2000
         self.assertEqual(metrics["max_threads_per_process"], 5.0)
         self.assertEqual(metrics["min_threads_per_process"], 3.0)
         self.assertEqual(metrics["avg_threads_per_process"], 4.0)
+
+    @patch('multiprocessing.cpu_count')
+    def test_get_cpu_cores_count(self, mock_cpu_count):
+        """Test getting CPU cores count."""
+        # Mock multiprocessing.cpu_count
+        mock_cpu_count.return_value = 8
+        
+        # Call function
+        result = get_cpu_cores_count()
+        
+        # Verify result
+        self.assertEqual(result, 8)
+        mock_cpu_count.assert_called_once()
+
+    @patch('common.process_monitor.subprocess.check_output')
+    def test_get_process_cpu_per_core_success(self, mock_check_output):
+        """Test getting per-core CPU usage for a process."""
+        # Mock pidstat output with CPU core usage
+        mock_check_output.return_value = b"10:00:00 PM   1000  1.0  2.0  0.0  0.0  3.0   0\n10:00:00 PM   1000  2.0  1.0  0.0  0.0  3.0   1"
+        
+        # Call function
+        result = get_process_cpu_per_core("1000")
+        
+        # Verify result
+        self.assertEqual(result, {"cpu_core_0": 3.0, "cpu_core_1": 3.0})
+        mock_check_output.assert_called_once()
+
+    @patch('common.process_monitor.subprocess.check_output')
+    def test_get_process_cpu_per_core_command_not_found(self, mock_check_output):
+        """Test handling when pidstat command is not found."""
+        # Mock pidstat command not found
+        mock_check_output.return_value = b"pidstat: command not found"
+        
+        # Call function
+        result = get_process_cpu_per_core("1000")
+        
+        # Verify empty result when command not found
+        self.assertEqual(result, {})
+        mock_check_output.assert_called_once()
+
+    @patch('common.process_monitor.subprocess.check_output')
+    def test_get_process_cpu_per_core_error(self, mock_check_output):
+        """Test error handling in get_process_cpu_per_core."""
+        # Mock subprocess error
+        mock_check_output.side_effect = Exception("Test error")
+        
+        # Call function
+        result = get_process_cpu_per_core("1000")
+        
+        # Verify empty result on error
+        self.assertEqual(result, {})
+        mock_check_output.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()
