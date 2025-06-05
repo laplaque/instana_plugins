@@ -2,6 +2,30 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
+def _resolve_log_file_path(log_file=None):
+    """
+    Resolve the log file path, creating any necessary directories.
+    
+    Args:
+        log_file: Path to the log file (default: None, which will use project_root/logs/app.log)
+        
+    Returns:
+        Absolute path to the log file
+    """
+    # Determine the default log file path if not provided
+    if log_file is None:
+        # Get the project root directory (2 levels up from this file)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        log_dir = os.path.join(project_root, 'logs')
+        log_file = os.path.join(log_dir, 'app.log')
+    
+    # Create directory for log file if it doesn't exist
+    log_dir = os.path.dirname(os.path.abspath(log_file))
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    return os.path.abspath(log_file)
+
 def setup_logging(log_level=logging.INFO, log_file=None):
     """
     Setup logging configuration with file and console handlers.
@@ -10,12 +34,9 @@ def setup_logging(log_level=logging.INFO, log_file=None):
         log_level: The logging level (default: logging.INFO)
         log_file: Path to the log file (default: None, which will use project_root/logs/app.log)
     """
-    # Determine the default log file path if not provided
-    if log_file is None:
-        # Get the project root directory (2 levels up from this file)
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        log_dir = os.path.join(project_root, 'logs')
-        log_file = os.path.join(log_dir, 'app.log')
+    # Resolve the log file path, creating directories if needed
+    log_file = _resolve_log_file_path(log_file)
+    
     # Create formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
@@ -34,10 +55,6 @@ def setup_logging(log_level=logging.INFO, log_file=None):
     
     # Add file handler with rotation
     try:
-        # Create directory for log file if it doesn't exist
-        log_dir = os.path.dirname(os.path.abspath(log_file))
-        os.makedirs(log_dir, exist_ok=True)
-            
         file_handler = RotatingFileHandler(
             log_file,
             maxBytes=5 * 1024 * 1024,  # 5 MB
