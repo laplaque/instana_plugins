@@ -335,8 +335,10 @@ class InstanaOTelConnector:
                 "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
             ]
             
-            # Add CPU core metrics to expected metrics - use system's actual CPU count
+            # Compute the CPU core count once and reuse it throughout the function
             cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
+            
+            # Add CPU core metrics to expected metrics
             for i in range(cpu_core_count):  # Support up to the actual number of cores
                 expected_metrics.append(f"cpu_core_{i}")
             
@@ -359,8 +361,7 @@ class InstanaOTelConnector:
                 "min_threads_per_process": True
             }
             
-            # Add CPU core metrics to percentage metrics - use the same dynamic CPU count
-            cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
+            # Add CPU core metrics to percentage metrics - reuse the same CPU count from above
             for i in range(cpu_core_count):  # Use actual CPU count instead of hardcoded value
                 percentage_metrics[f"cpu_core_{i}"] = True
             
@@ -501,9 +502,9 @@ class InstanaOTelConnector:
                 "memory_usage": True
             }
             
-            # Add CPU core metrics to percentage metrics - use system's actual CPU count
+            # Add CPU core metrics to percentage metrics
             cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
-            for i in range(cpu_core_count):  # Use actual CPU count instead of hardcoded value
+            for i in range(cpu_core_count):
                 percentage_metrics[f"cpu_core_{i}"] = True
                 
             # Update the metrics state dictionary with new values

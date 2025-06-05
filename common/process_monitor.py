@@ -47,8 +47,17 @@ def get_process_cpu_per_core(pid):
     try:
         # Get process-specific per-core CPU usage
         # This requires the 'pidstat' command from the sysstat package
-        cmd = f"pidstat -p {pid} -u -h 1 1 -C 0 | grep -v '%'"
-        result = subprocess.check_output(cmd, shell=True, stderr=subprocess.PIPE).decode('utf-8')
+        try:
+            # First run pidstat with safer list arguments
+            cmd = ["pidstat", "-p", str(pid), "-u", "-h", "1", "1", "-C", "0"]
+            result = subprocess.check_output(cmd, stderr=subprocess.PIPE).decode('utf-8')
+            
+            # Filter out header lines separately without using grep and shell=True
+            result_lines = [line for line in result.splitlines() if '%' not in line]
+            result = '\n'.join(result_lines)
+        except subprocess.CalledProcessError:
+            # If the command fails, return empty dict
+            return {}
         
         # If pidstat is not available, return empty dict
         if "command not found" in result:
