@@ -9,6 +9,11 @@ jobs:
   validate-tag:
     runs-on: ubuntu-latest
     steps:
+      - name: Wait for tag to propagate
+        run: |
+          echo "Waiting for 30 seconds to allow tag to be pushed to origin..."
+          sleep 30
+          
       - name: Checkout code
         uses: actions/checkout@v3
         with:
@@ -64,21 +69,26 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           VERSION=${TAG#v}
           
-          # Check if version exists in sensor files
-          SENSOR_FILES=$(find . -name "sensor.py")
-          VERSION_FOUND=false
-          
-          for file in $SENSOR_FILES; do
-            if grep -q "VERSION = \"$VERSION\"" "$file"; then
-              echo "Found matching version in $file"
-              VERSION_FOUND=true
-            fi
-          done
-          
-          if [ "$VERSION_FOUND" = false ]; then
-            echo "Error: Version $VERSION not found in sensor.py files"
-            echo "Please update the VERSION variable in all sensor.py files"
+          # Check if version exists in common/__init__.py (centralized location)
+          if ! grep -q "VERSION = \"$VERSION\"" "common/__init__.py"; then
+            echo "Error: Version $VERSION not found in common/__init__.py"
+            echo "Please update the VERSION variable in common/__init__.py"
             exit 1
+          else
+            echo "✅ Found matching version in common/__init__.py"
+          fi
+          
+          # Verify the version can be extracted using extract_version.sh
+          # This ensures installation scripts will work correctly
+          PARENT_DIR="$(pwd)"
+          TAG_VERSION="$VERSION"
+          source ./common/extract_version.sh
+          
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: Version extracted from common/__init__.py ($VERSION) does not match tag version ($TAG_VERSION)"
+            exit 1
+          else
+            echo "✅ Version extraction script successfully returns the correct version"
           fi
           
           # Check if version exists in RELEASE_NOTES.md
@@ -86,6 +96,8 @@ jobs:
             echo "Error: Version $VERSION not found in RELEASE_NOTES.md"
             echo "Please update RELEASE_NOTES.md with the new version"
             exit 1
+          else
+            echo "✅ Found matching version in RELEASE_NOTES.md"
           fi
           
       - name: Notify success
