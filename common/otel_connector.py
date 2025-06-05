@@ -270,13 +270,13 @@ class InstanaOTelConnector:
             raise
             
     def _create_metric_callback(self, metric_name):
-        """Create a callback function for a specific metric.
+        """Create a generator callback function for a specific metric.
 
         Args:
             metric_name: The name of the metric this callback will observe
 
         Returns:
-            A callback function for the observable gauge
+            A generator callback function that yields Observation objects for the observable gauge
         """
         def callback(options):
             try:
@@ -328,7 +328,7 @@ class InstanaOTelConnector:
                     def callback(options):
                         if metric_name in self._metrics_state:
                             value = self._metrics_state[metric_name]
-                            options.observe(value)
+                            yield Observation(value)
                             logger.debug(f"Observed metric {metric_name}={value}")
                     return callback
                 
