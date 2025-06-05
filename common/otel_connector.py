@@ -331,6 +331,7 @@ class InstanaOTelConnector:
                         # Now we yield Observation objects instead
                         if metric_name in self._metrics_state:
                             value = self._metrics_state[metric_name]
+                            # Use yield with Observation object as required by OpenTelemetry API 1.20.0+
                             yield Observation(value)
                             logger.debug(f"Observed metric {metric_name}={value}")
                     return callback
@@ -352,6 +353,8 @@ class InstanaOTelConnector:
             def general_callback(options):
                 for name, value in self._metrics_state.items():
                     if name not in expected_metrics and isinstance(value, (int, float)):
+                        # Yield Observation with metric metadata for dynamic metrics
+                        # The "metric_name" attribute helps identify the source in Instana
                         yield Observation(value, {"metric_name": name})
                         logger.debug(f"Observed general metric {name}={value}")
             
