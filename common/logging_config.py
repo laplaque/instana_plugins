@@ -37,8 +37,7 @@ def _resolve_log_file_path(log_file=None):
     
     # Create directory for log file if it doesn't exist
     log_dir = os.path.dirname(os.path.abspath(log_file))
-    if log_dir and not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    os.makedirs(log_dir, exist_ok=True)
         
     return os.path.abspath(log_file)
 
