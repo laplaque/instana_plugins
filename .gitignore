@@ -38,3 +38,7 @@ Thumbs.db
 *git_author=*
 diagram.png
 *.bak
+
+# Logs directory - keep the directory but ignore log files
+logs/*.log
+logs/*.log.*
