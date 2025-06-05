@@ -41,6 +41,8 @@ def parse_args(description):
     parser.add_argument('--log-level', default='INFO',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help='Set the logging level (default: INFO)')
+    parser.add_argument('--log-file', 
+                        help='Path to the log file (default: project_root/logs/app.log)')
     return parser.parse_args()
 
 def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=60, run_once=False):
@@ -110,8 +112,11 @@ def run_sensor(process_name, plugin_name, version):
     """Main entry point for sensor scripts"""
     args = parse_args(f'Monitor {process_name} process metrics for Instana')
     
-    # Set the log level
-    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    # Set up logging with the specified log file if provided
+    setup_logging(
+        log_level=getattr(logging, args.log_level),
+        log_file=args.log_file
+    )
     
     logger.info(f"Starting {plugin_name} v{version} with Instana agent at {args.agent_host}:{args.agent_port}")
     
