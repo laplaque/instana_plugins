@@ -45,7 +45,7 @@ try:
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-    from opentelemetry.metrics import set_meter_provider, get_meter_provider
+    from opentelemetry.metrics import set_meter_provider, get_meter_provider, Observation
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:
     logger.error("OpenTelemetry packages not found. Please install required dependencies.")
@@ -271,18 +271,20 @@ class InstanaOTelConnector:
             
     def _create_metric_callback(self, metric_name):
         """Create a callback function for a specific metric.
-        
+
         Args:
             metric_name: The name of the metric this callback will observe
-            
+
         Returns:
             A callback function for the observable gauge
         """
-        def callback(observer):
+        def callback(options):
             try:
                 if metric_name in self._metrics_state:
-                    observer.observe(self._metrics_state[metric_name])
-                    logger.debug(f"Observed metric {metric_name}={self._metrics_state[metric_name]}")
+                    value = self._metrics_state[metric_name]
+                    # Yield an Observation object as required by OpenTelemetry API
+                    yield Observation(value)
+                    logger.debug(f"Observed metric {metric_name}={value}")
             except Exception as e:
                 logger.error(f"Error in metric callback for {metric_name}: {e}")
         return callback
@@ -347,7 +349,7 @@ class InstanaOTelConnector:
             def general_callback(options):
                 for name, value in self._metrics_state.items():
                     if name not in expected_metrics and isinstance(value, (int, float)):
-                        options.observe(value, {"metric_name": name})
+                        yield Observation(value, {"metric_name": name})
                         logger.debug(f"Observed general metric {name}={value}")
             
             # Register a general observable gauge for unexpected metrics
