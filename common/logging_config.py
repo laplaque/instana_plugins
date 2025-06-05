@@ -2,7 +2,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-def _resolve_log_file_path(log_file=None):
+def _resolve_log_file_path(log_file=None, install_dir=None):
     """
     Resolve the log file path, creating any necessary directories.
     
@@ -13,6 +13,7 @@ def _resolve_log_file_path(log_file=None):
     
     Args:
         log_file: Path to the log file (default: None, which will use project_root/logs/app.log)
+        install_dir: Installation directory (default: None, which will use the project root)
         
     Returns:
         Absolute path to the log file
@@ -24,6 +25,9 @@ def _resolve_log_file_path(log_file=None):
         >>> _resolve_log_file_path('/custom/path/app.log')
         '/custom/path/app.log'
         
+        >>> _resolve_log_file_path('app.log', '/usr/local/bin')
+        '/usr/local/bin/logs/app.log'
+        
     Raises:
         PermissionError: If directory creation fails due to permissions
         OSError: If directory creation fails for other reasons
@@ -34,6 +38,11 @@ def _resolve_log_file_path(log_file=None):
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         log_dir = os.path.join(project_root, 'logs')
         log_file = os.path.join(log_dir, 'app.log')
+    elif os.path.dirname(log_file) == '' and install_dir is not None:
+        # If log_file is just a filename and install_dir is provided,
+        # use the install_dir as the base directory
+        log_dir = os.path.join(install_dir, 'logs')
+        log_file = os.path.join(log_dir, log_file)
     
     # Create directory for log file if it doesn't exist
     log_dir = os.path.dirname(os.path.abspath(log_file))
@@ -41,16 +50,17 @@ def _resolve_log_file_path(log_file=None):
         
     return os.path.abspath(log_file)
 
-def setup_logging(log_level=logging.INFO, log_file=None):
+def setup_logging(log_level=logging.INFO, log_file=None, install_dir=None):
     """
     Setup logging configuration with file and console handlers.
     
     Args:
         log_level: The logging level (default: logging.INFO)
         log_file: Path to the log file (default: None, which will use project_root/logs/app.log)
+        install_dir: Installation directory (default: None, which will use the project root)
     """
     # Resolve the log file path, creating directories if needed
-    log_file = _resolve_log_file_path(log_file)
+    log_file = _resolve_log_file_path(log_file, install_dir)
     
     # Create formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

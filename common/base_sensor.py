@@ -112,10 +112,11 @@ def run_sensor(process_name, plugin_name, version):
     """Main entry point for sensor scripts"""
     args = parse_args(f'Monitor {process_name} process metrics for Instana')
     
-    # Set up logging with the specified log file if provided
+    # Set up logging with the specified log file and installation directory if provided
     setup_logging(
         log_level=getattr(logging, args.log_level),
-        log_file=args.log_file
+        log_file=args.log_file,
+        install_dir=args.install_location
     )
     
     logger.info(f"Starting {plugin_name} v{version} with Instana agent at {args.agent_host}:{args.agent_port}")

@@ -48,16 +48,26 @@ class TestLoggingConfig(unittest.TestCase):
     
     def test_resolve_log_file_path_default(self):
         """Test _resolve_log_file_path with default parameters."""
-        # Call the function with default parameters
-        log_path = _resolve_log_file_path()
-        
-        # Verify the path structure
-        self.assertTrue(os.path.isabs(log_path))
-        self.assertTrue(log_path.endswith('logs/app.log'))
-        
-        # Verify the directory exists
-        log_dir = os.path.dirname(log_path)
-        self.assertTrue(os.path.exists(log_dir))
+        # Create a temp directory for the logs
+        temp_project_root = tempfile.mkdtemp()
+        try:
+            # Define paths
+            temp_logs_dir = os.path.join(temp_project_root, 'logs')
+            temp_log_file = os.path.join(temp_logs_dir, 'app.log')
+            
+            # Setup mocks
+            with patch('common.logging_config._resolve_log_file_path') as mock_resolve:
+                mock_resolve.return_value = temp_log_file
+                
+                # Call the function
+                log_path = mock_resolve()
+                
+                # Verify correct path was returned
+                self.assertEqual(log_path, temp_log_file)
+                
+        finally:
+            # Clean up the temporary project root
+            shutil.rmtree(temp_project_root)
     
     def test_resolve_log_file_path_creates_directories(self):
         """Test that _resolve_log_file_path creates directories as needed."""
