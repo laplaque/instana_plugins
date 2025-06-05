@@ -36,8 +36,7 @@ def setup_logging(log_level=logging.INFO, log_file=None):
     try:
         # Create directory for log file if it doesn't exist
         log_dir = os.path.dirname(os.path.abspath(log_file))
-        if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
             
         file_handler = RotatingFileHandler(
             log_file,
