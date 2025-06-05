@@ -13,8 +13,10 @@ setup_logging()  # Configure logging at the start of the module
 import os
 import json
 import logging
-from typing import Dict, Any, Optional
+import re
+from typing import Dict, Any, Optional, List
 import socket
+import sys
 
 # Custom implementation of strtobool to replace distutils.util.strtobool
 def strtobool(val):
@@ -34,6 +36,15 @@ def strtobool(val):
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Import metadata store - this is required
+try:
+    from common.metadata_store import MetadataStore
+except ImportError as e:
+    logger.error("MetadataStore module not found. This is a required component.")
+    logger.error(f"Error: {e}")
+    logger.error("Please ensure common/metadata_store.py exists and is importable.")
+    sys.exit(1)
 
 # OpenTelemetry imports
 try:
@@ -57,7 +68,7 @@ class InstanaOTelConnector:
     OpenTelemetry connector for Instana.
     
     This class provides functionality to send metrics and traces to Instana
-    using the OpenTelemetry protocol.
+    using the OpenTelemetry protocol with proper metric formatting.
     """
     
     def __init__(
@@ -69,7 +80,8 @@ class InstanaOTelConnector:
         use_tls: bool = None,
         ca_cert_path: Optional[str] = None,
         client_cert_path: Optional[str] = None,
-        client_key_path: Optional[str] = None
+        client_key_path: Optional[str] = None,
+        metadata_db_path: Optional[str] = None
     ):
         """
         Initialize the Instana OpenTelemetry connector.
@@ -89,6 +101,15 @@ class InstanaOTelConnector:
         
         # Add a registry to track registered metrics
         self._metrics_registry = set()
+        
+        # Initialize metadata store - this is required
+        try:
+            self._metadata_store = MetadataStore(db_path=metadata_db_path)
+            logger.info(f"Initialized metadata store at: {self._metadata_store.db_path}")
+        except Exception as e:
+            logger.error(f"Failed to initialize metadata store: {e}")
+            logger.error("A working metadata store is required for proper operation.")
+            raise RuntimeError(f"Failed to initialize metadata store: {e}")
         # Get configuration from environment variables or use provided values
         self.service_name = service_name
         self.agent_host = agent_host or os.environ.get('INSTANA_AGENT_HOST', 'localhost')
@@ -121,11 +142,22 @@ class InstanaOTelConnector:
             if self.client_cert_path and self.client_key_path:
                 logger.info(f"Using client certificate for mutual TLS")
         
+        # Get service ID and display name from metadata store
+        try:
+            self.service_id, self.display_name = self._metadata_store.get_or_create_service(service_name)
+            logger.info(f"Using service ID: {self.service_id} with display name: {self.display_name}")
+        except Exception as e:
+            logger.error(f"Error getting service ID from metadata store: {e}")
+            logger.error("Cannot continue without a valid service ID.")
+            raise RuntimeError(f"Failed to get service ID: {e}")
+        
         # Store attributes for later use
         self.attributes = {
             "service.name": service_name,
             "service.namespace": "instana.plugins",
             "host.name": socket.gethostname(),
+            "service.display_name": self.display_name,
+            "service.id": self.service_id,
         }
         
         # Add custom resource attributes if provided
@@ -303,6 +335,20 @@ class InstanaOTelConnector:
                 "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
             ]
             
+            # Add CPU core metrics to expected metrics
+            for i in range(32):  # Support up to 32 cores
+                expected_metrics.append(f"cpu_core_{i}")
+            
+            # Define which metrics should be displayed as percentages
+            percentage_metrics = {
+                "cpu_usage": True,
+                "memory_usage": True
+            }
+            
+            # Add CPU core metrics to percentage metrics
+            for i in range(32):
+                percentage_metrics[f"cpu_core_{i}"] = True
+            
             # Add any metric-specific descriptions
             metric_descriptions = {
                 "cpu_usage": "CPU usage as percentage",
@@ -318,31 +364,52 @@ class InstanaOTelConnector:
             
             # In newer OpenTelemetry versions, we need to use callbacks differently
             for metric_name in expected_metrics:
-                # Use specific description if available, otherwise use generic
-                description = metric_descriptions.get(
-                    metric_name, f"Metric for {metric_name}"
-                )
+                # Get metric ID and display name from metadata store
+                is_percentage = percentage_metrics.get(metric_name, False)
                 
-                # Define a callback for this specific metric - capturing the metric_name in the closure
-                def create_callback(metric_name=metric_name):  # Default argument to capture current value
-                    def callback(options):
-                        # options parameter is the ObservableCallbackOptions from OpenTelemetry API (v1.20.0+)
-                        # In previous versions this was called 'observer' and had an observe() method
-                        # Now we yield Observation objects instead
-                        if metric_name in self._metrics_state:
-                            value = self._metrics_state[metric_name]
-                            # Use yield with Observation object as required by OpenTelemetry API 1.20.0+
-                            yield Observation(value)
-                            logger.debug(f"Observed metric {metric_name}={value}")
-                    return callback
-                
-                # Create the observable gauge with the callback
-                gauge = self.meter.create_observable_gauge(
-                    name=metric_name,
-                    description=description,
-                    unit="1",
-                    callbacks=[create_callback()]
-                )
+                try:
+                    metric_id, display_name = self._metadata_store.get_or_create_metric(
+                        service_id=self.service_id,
+                        name=metric_name,
+                        unit="%" if is_percentage else "",
+                        format_type="percentage" if is_percentage else "number",
+                        decimal_places=2,
+                        is_percentage=is_percentage
+                    )
+                    
+                    # Use specific description if available, otherwise use generic
+                    description = metric_descriptions.get(
+                        metric_name, f"Metric for {display_name}"
+                    )
+                    
+                    # Define a callback for this specific metric - capturing the metric_name in the closure
+                    def create_callback(metric_name=metric_name, is_percentage=is_percentage):
+                        def callback(options):
+                            # options parameter is the ObservableCallbackOptions from OpenTelemetry API
+                            if metric_name in self._metrics_state:
+                                value = self._metrics_state[metric_name]
+                                
+                                # Format the value (convert to percentage if needed, round to 2 decimals)
+                                value = self._metadata_store.format_metric_value(
+                                    value, is_percentage=is_percentage, decimal_places=2
+                                )
+                                    
+                                # Use yield with Observation object
+                                yield Observation(value)
+                                logger.debug(f"Observed metric {display_name}={value}")
+                        return callback
+                    
+                    # Create the observable gauge with the callback and proper naming
+                    # Use the simple name (last part after any namespaces) for better display in Instana
+                    gauge = self.meter.create_observable_gauge(
+                        name=metric_name.split('/')[-1],
+                        description=description,
+                        unit="%" if is_percentage else "1",
+                        callbacks=[create_callback()]
+                    )
+                except Exception as e:
+                    logger.error(f"Error registering metric {metric_name}: {e}")
+                    continue
                 
                 # Add to registry for tracking
                 self._metrics_registry.add(metric_name)
@@ -391,17 +458,40 @@ class InstanaOTelConnector:
             return
             
         try:
+            # Define which metrics should be displayed as percentages
+            percentage_metrics = {
+                "cpu_usage": True,
+                "memory_usage": True
+            }
+            
+            # Add CPU core metrics to percentage metrics
+            for i in range(32):
+                percentage_metrics[f"cpu_core_{i}"] = True
+                
             # Update the metrics state dictionary with new values
             metrics_updated = 0
             for name, value in metrics.items():
                 if isinstance(value, (int, float)):
+                    # Store the raw value - formatting happens in the callback
                     self._metrics_state[name] = value
                     metrics_updated += 1
+                    
+                    # Check if this is a new metric that needs to be registered
+                    if name not in self._metrics_registry and name != "monitored_pids":
+                        # Register the new metric for observation
+                        self._register_new_metric(name, percentage_metrics.get(name, False))
+                        
                     logger.debug(f"Updated metric state {name}={value}")
                 elif isinstance(value, str) and value.isdigit():
                     # Try to convert string numbers
                     self._metrics_state[name] = float(value)
                     metrics_updated += 1
+                    
+                    # Check if this is a new metric that needs to be registered
+                    if name not in self._metrics_registry and name != "monitored_pids":
+                        # Register the new metric for observation
+                        self._register_new_metric(name, percentage_metrics.get(name, False))
+                        
                     logger.debug(f"Updated metric state {name}={value}")
                 else:
                     # Skip non-numeric metrics
@@ -410,6 +500,60 @@ class InstanaOTelConnector:
             logger.debug(f"Updated {metrics_updated} metrics for {self.service_name}")
         except Exception as e:
             logger.error(f"Error recording metrics: {e}")
+            
+    def _register_new_metric(self, name: str, is_percentage: bool = False):
+        """
+        Register a new metric that was not in the initial expected metrics list.
+        
+        Args:
+            name: Name of the metric to register
+            is_percentage: Whether this metric should be displayed as a percentage
+        """
+        if not hasattr(self, 'meter') or not self.meter:
+            logger.error(f"Cannot register new metric {name}: Meter not initialized")
+            return
+            
+        try:
+            # Get metric ID and display name from metadata store
+            metric_id, display_name = self._metadata_store.get_or_create_metric(
+                service_id=self.service_id,
+                name=name,
+                unit="%" if is_percentage else "",
+                format_type="percentage" if is_percentage else "number",
+                decimal_places=2,
+                is_percentage=is_percentage
+            )
+            
+            # Create callback for the new metric
+            def create_callback(name=name, is_percentage=is_percentage):
+                def callback(options):
+                    if name in self._metrics_state:
+                        value = self._metrics_state[name]
+                        
+                        # Format the value using the metadata store
+                        value = self._metadata_store.format_metric_value(
+                            value, is_percentage=is_percentage, decimal_places=2
+                        )
+                            
+                        yield Observation(value)
+                        logger.debug(f"Observed dynamic metric {display_name}={value}")
+                return callback
+            
+            # Create the observable gauge with the callback
+            gauge = self.meter.create_observable_gauge(
+                # Use last component of metric name for display in Instana
+                name=name.split('/')[-1],
+                description=f"Metric for {display_name}",
+                unit="%" if is_percentage else "1",
+                callbacks=[create_callback()]
+            )
+            
+            # Add to registry
+            self._metrics_registry.add(name)
+            logger.info(f"Registered new observable metric: {name} (display: {display_name})")
+            
+        except Exception as e:
+            logger.error(f"Error registering new metric {name}: {e}")
             
     def create_span(self, name: str, attributes: Optional[Dict[str, Any]] = None):
         """

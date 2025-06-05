@@ -15,14 +15,61 @@ import subprocess
 import json
 import re
 import logging
+import multiprocessing
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Import the OpenTelemetry connector
 from common.otel_connector import InstanaOTelConnector
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+def get_cpu_cores_count():
+    """
+    Get the number of CPU cores in the system.
+    
+    Returns:
+        int: Number of CPU cores
+    """
+    return multiprocessing.cpu_count()
+
+def get_process_cpu_per_core(pid):
+    """
+    Get per-core CPU usage for a specific process ID.
+    
+    Args:
+        pid (str): Process ID
+        
+    Returns:
+        dict: Dictionary with CPU core usage (core_id -> usage percentage)
+    """
+    try:
+        # Get process-specific per-core CPU usage
+        # This requires the 'pidstat' command from the sysstat package
+        cmd = f"pidstat -p {pid} -u -h 1 1 -C 0 | grep -v '%'"
+        result = subprocess.check_output(cmd, shell=True, stderr=subprocess.PIPE).decode('utf-8')
+        
+        # If pidstat is not available, return empty dict
+        if "command not found" in result:
+            return {}
+        
+        # Extract per-core CPU usage
+        core_usage = {}
+        lines = result.strip().split('\n')
+        
+        for line in lines:
+            if pid in line:
+                parts = line.split()
+                if len(parts) >= 8:  # Format: Time|UID|PID|%usr|%system|%guest|%wait|%CPU|CPU
+                    core_id = parts[-1]
+                    cpu_usage = float(parts[-2])
+                    core_usage[f"cpu_core_{core_id}"] = cpu_usage
+        
+        return core_usage
+    except Exception as e:
+        logger.debug(f"Error getting per-core CPU usage for PID {pid}: {e}")
+        return {}
 
 def get_process_metrics(process_name):
     """
@@ -51,8 +98,8 @@ def get_process_metrics(process_name):
             return None
             
         # Initialize metrics
-        total_cpu = 0
-        total_memory = 0
+        total_cpu = 0.0
+        total_memory = 0.0
         total_disk_read = 0
         total_disk_write = 0
         total_open_fds = 0
@@ -62,6 +109,10 @@ def get_process_metrics(process_name):
         
         # Track PIDs for logging
         process_pids = []
+        
+        # Initialize per-core CPU usage aggregation
+        cpu_cores = get_cpu_cores_count()
+        per_core_cpu = {f"cpu_core_{i}": 0.0 for i in range(cpu_cores)}
         
         for process in matching_processes:
             parts = process.split()
@@ -91,6 +142,12 @@ def get_process_metrics(process_name):
                 vol_ctx, nonvol_ctx = get_context_switches(pid)
                 total_voluntary_ctx_switches += vol_ctx
                 total_nonvoluntary_ctx_switches += nonvol_ctx
+                
+                # Get per-core CPU usage
+                core_usage = get_process_cpu_per_core(pid)
+                for core_id, usage in core_usage.items():
+                    if core_id in per_core_cpu:
+                        per_core_cpu[core_id] += usage
             except Exception as e:
                 logger.warning(f"Error processing PID {pid}: {str(e)}")
                 continue
@@ -101,18 +158,26 @@ def get_process_metrics(process_name):
         logger.error(f"Unexpected error in get_process_metrics: {str(e)}")
         return None
     
-    return {
-        "cpu_usage": total_cpu,
-        "memory_usage": total_memory,
+    # CPU and memory are already percentages but need to be rounded
+    metrics = {
+        "cpu_usage": round(total_cpu, 2),                   # Already percentage
+        "memory_usage": round(total_memory, 2),             # Already percentage
         "process_count": process_count,
-        "disk_read_bytes": total_disk_read,
-        "disk_write_bytes": total_disk_write,
-        "open_file_descriptors": total_open_fds,
-        "thread_count": total_threads,
-        "voluntary_ctx_switches": total_voluntary_ctx_switches,
-        "nonvoluntary_ctx_switches": total_nonvoluntary_ctx_switches,
-        "monitored_pids": ",".join(process_pids)  # For debugging
+        "disk_read_bytes": round(total_disk_read, 2),
+        "disk_write_bytes": round(total_disk_write, 2),
+        "open_file_descriptors": round(total_open_fds, 2),
+        "thread_count": round(total_threads, 2),
+        "voluntary_ctx_switches": round(total_voluntary_ctx_switches, 2),
+        "nonvoluntary_ctx_switches": round(total_nonvoluntary_ctx_switches, 2),
+        "monitored_pids": ",".join(process_pids)            # For debugging
     }
+    
+    # Add per-core CPU metrics if available
+    for core_id, usage in per_core_cpu.items():
+        if usage > 0:  # Only include cores that show activity
+            metrics[core_id] = round(usage, 2)
+    
+    return metrics
 
 def get_disk_io_for_pid(pid):
     """Get disk I/O statistics for a specific process ID"""
