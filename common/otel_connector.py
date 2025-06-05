@@ -355,6 +355,8 @@ class InstanaOTelConnector:
                     if name not in expected_metrics and isinstance(value, (int, float)):
                         # Yield Observation with metric metadata for dynamic metrics
                         # The "metric_name" attribute helps identify the source in Instana
+                        # This metadata structure is used by Instana to correlate metrics with their source
+                        # and is required for proper identification of dynamic metrics in the Instana UI
                         yield Observation(value, {"metric_name": name})
                         logger.debug(f"Observed general metric {name}={value}")
             
