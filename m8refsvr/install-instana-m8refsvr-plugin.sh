@@ -30,14 +30,8 @@ trap cleanup ERR
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( dirname "$SCRIPT_DIR" )"
 
-# Extract version from common/__init__.py
-if [ -f "${PARENT_DIR}/common/__init__.py" ]; then
-    VERSION=$(python3 -c "import sys; sys.path.insert(0, '${PARENT_DIR}'); from common import VERSION; print(VERSION)")
-    echo "Plugin version: ${VERSION}"
-else
-    echo "Warning: Could not find common/__init__.py to extract version"
-    VERSION="unknown"
-fi
+# Source the shared version extraction script
+source "${PARENT_DIR}/common/extract_version.sh"
 
 # Default installation directories
 DEFAULT_BASE_DIR="/opt/instana_plugins"

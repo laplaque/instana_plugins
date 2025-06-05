@@ -5,10 +5,12 @@
 ### feat: Centralized version parameter and fixed OpenTelemetry Observation yield pattern
 
 - Centralized version parameter in `common/__init__.py` as a single source of truth
+- Created a shared `common/extract_version.sh` script to reduce duplication in installation scripts
 - Modified all sensor files to import the VERSION from common
-- Updated installation scripts to extract the version dynamically from Python
+- Updated installation scripts to use the shared version extraction script
 - Fixed OpenTelemetry Observable callbacks to use the yield Observation pattern
 - Added proper import of Observation class at the top of the file
+- Enhanced documentation of OpenTelemetry metrics observation with detailed comments
 - Simplified version management: version only needs to be updated in one place
 - Eliminated potential version inconsistencies between different components
 - Improved maintainability for future releases

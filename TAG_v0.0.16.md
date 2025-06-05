@@ -7,10 +7,12 @@ This release builds on v0.0.15 by centralizing the version parameter across all 
 ### Changes
 
 - Centralized version parameter in `common/__init__.py` as a single source of truth
+- Created a shared `common/extract_version.sh` script to reduce duplication in installation scripts
 - Modified all sensor files to import the VERSION from common
-- Updated installation scripts to extract the version dynamically from Python
+- Updated installation scripts to use the shared version extraction script
 - Fixed OpenTelemetry Observable callbacks to use the yield Observation pattern
 - Added proper import of Observation class at the top of the file
+- Enhanced documentation of OpenTelemetry metrics observation with detailed comments
 
 ### Impact
 
@@ -22,12 +24,13 @@ This release builds on v0.0.15 by centralizing the version parameter across all 
 ### Affected Files
 
 - `common/__init__.py` - Added centralized VERSION constant
-- `common/otel_connector.py` - Updated observable metric callbacks to use yield pattern
+- `common/extract_version.sh` - New shared script for version extraction
+- `common/otel_connector.py` - Updated observable metric callbacks to use yield pattern and improved documentation
 - `m8mulprc/sensor.py` - Removed hardcoded version, now imports from common
 - `m8prcsvr/sensor.py` - Removed hardcoded version, now imports from common
 - `m8refsvr/sensor.py` - Removed hardcoded version, now imports from common
 - `mstrsvr/sensor.py` - Removed hardcoded version, now imports from common
-- All installation scripts - Updated to extract version from Python
+- All installation scripts - Updated to use the shared version extraction script
 
 ### Contributors
 
