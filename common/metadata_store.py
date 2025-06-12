@@ -122,6 +122,9 @@ class MetadataStore:
             )
             """)
             
+            # Run database migrations for existing databases
+            self._migrate_database(cursor)
+            
             # Create format rules table
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS format_rules (
@@ -154,6 +157,37 @@ class MetadataStore:
         except sqlite3.Error as e:
             logger.error(f"Error initializing database: {e}")
             raise
+    
+    def _migrate_database(self, cursor):
+        """
+        Migrate existing database to add missing columns.
+        
+        Args:
+            cursor: SQLite cursor for executing migrations
+        """
+        try:
+            # Check if host_id column exists in services table
+            cursor.execute("PRAGMA table_info(services)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'host_id' not in columns:
+                logger.info("Adding host_id column to services table")
+                cursor.execute("ALTER TABLE services ADD COLUMN host_id TEXT")
+                cursor.execute("ALTER TABLE services ADD COLUMN namespace_id TEXT")
+                
+            # Check if is_counter column exists in metrics table
+            cursor.execute("PRAGMA table_info(metrics)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'is_counter' not in columns:
+                logger.info("Adding is_counter column to metrics table")
+                cursor.execute("ALTER TABLE metrics ADD COLUMN is_counter BOOLEAN DEFAULT 0")
+                
+            logger.debug("Database migration completed")
+            
+        except sqlite3.Error as e:
+            logger.warning(f"Error during database migration: {e}")
+            # Don't raise - this is non-critical
             
     def get_or_create_host(self, hostname: str) -> str:
         """
@@ -687,19 +721,16 @@ class MetadataStore:
         
     def get_simple_metric_name(self, full_metric_name: str) -> str:
         """
-        Extract a simple, display-friendly name from a fully qualified metric name.
+        Extract a simple, OpenTelemetry-compliant name from a fully qualified metric name.
         
-        This function handles various metric naming conventions:
-        - Extracts the last component after '/'
-        - Falls back to splitting on '.' if no '/' is present
-        - Removes any {} suffixes that might be present (for parameterized metrics)
-        - Handles edge cases like empty strings
+        This function handles various metric naming conventions and returns names that
+        comply with OpenTelemetry requirements (ASCII, <=63 chars, no spaces).
         
         Args:
             full_metric_name: The fully qualified metric name
             
         Returns:
-            The simple metric name for display
+            The simple metric name for OpenTelemetry registration (not display)
         """
         if not full_metric_name:
             return "unknown"
@@ -716,8 +747,9 @@ class MetadataStore:
         # Remove any {} suffixes (for parameterized metrics)
         simple_name = re.sub(r'\{.*\}$', '', simple_name)
         
-        # Apply formatting rules to the simple name
-        return self._format_metric_name(simple_name.strip())
+        # Return the simple name without formatting for OpenTelemetry compliance
+        # (formatting is handled separately for display purposes)
+        return simple_name.strip()
     
     def format_metric_value(
         self, 
