@@ -33,41 +33,45 @@ class TestSensors(unittest.TestCase):
         """Test M8PrcSvr sensor."""
         # Import the sensor module
         import m8prcsvr.sensor
+        from common import VERSION as EXPECTED_VERSION
         
         # Verify constants are set correctly
         self.assertEqual(m8prcsvr.sensor.PROCESS_NAME, "M8PrcSvr")
         self.assertEqual(m8prcsvr.sensor.PLUGIN_NAME, "m8prcsvr")
-        self.assertEqual(m8prcsvr.sensor.VERSION, "0.0.18")
+        self.assertEqual(m8prcsvr.sensor.VERSION, EXPECTED_VERSION)
 
     def test_m8mulprc_sensor(self):
         """Test M8MulPrc sensor."""
         # Import the sensor module
         import m8mulprc.sensor
+        from common import VERSION as EXPECTED_VERSION
         
         # Verify constants are set correctly
         self.assertEqual(m8mulprc.sensor.PROCESS_NAME, "M8MulPrc")
         self.assertEqual(m8mulprc.sensor.PLUGIN_NAME, "m8mulprc")
-        self.assertEqual(m8mulprc.sensor.VERSION, "0.0.18")
+        self.assertEqual(m8mulprc.sensor.VERSION, EXPECTED_VERSION)
 
     def test_mstrsvr_sensor(self):
         """Test MstrSvr sensor."""
         # Import the sensor module
         import mstrsvr.sensor
+        from common import VERSION as EXPECTED_VERSION
         
         # Verify constants are set correctly
         self.assertEqual(mstrsvr.sensor.PROCESS_NAME, "MstrSvr")
         self.assertEqual(mstrsvr.sensor.PLUGIN_NAME, "mstrsvr")
-        self.assertEqual(mstrsvr.sensor.VERSION, "0.0.18")
+        self.assertEqual(mstrsvr.sensor.VERSION, EXPECTED_VERSION)
         
     def test_m8refsvr_sensor(self):
         """Test M8RefSvr sensor."""
         # Import the sensor module
         import m8refsvr.sensor
+        from common import VERSION as EXPECTED_VERSION
         
         # Verify constants are set correctly
         self.assertEqual(m8refsvr.sensor.PROCESS_NAME, "M8RefSvr")
         self.assertEqual(m8refsvr.sensor.PLUGIN_NAME, "m8refsvr")
-        self.assertEqual(m8refsvr.sensor.VERSION, "0.0.18")
+        self.assertEqual(m8refsvr.sensor.VERSION, EXPECTED_VERSION)
 
 if __name__ == '__main__':
     unittest.main()

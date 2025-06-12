@@ -59,7 +59,31 @@ The framework consists of two main layers:
 - **process_monitor.py**: Process detection and metrics collection
 - **otel_connector.py**: OpenTelemetry protocol implementation
 - **logging_config.py**: Centralized logging configuration
-- **metadata_store.py**: Thread-safe metadata persistence
+- **metadata_store.py**: Thread-safe metadata persistence with versioned schema
+
+### Metadata Schema Versioning
+
+The framework includes a sophisticated metadata schema versioning system that automatically handles database migrations:
+
+#### Version Management
+- **Current Version**: Schema version 1.0 (defined in `common/__init__.py`)
+- **Version Tracking**: `schema_version` table tracks all database migrations with timestamps
+- **Automatic Migration**: Detects legacy databases and migrates them automatically
+
+#### Migration Behavior
+- **New Installations**: Create fresh database with current schema (v1.0)
+- **Legacy Databases**: Detected automatically, previous metadata deleted with user warning, fresh v1.0 schema created
+- **Current Schema**: No migration needed, existing data fully preserved
+
+#### Database Location
+By default, metadata is stored in `~/.instana_plugins/metadata.db`. This location can be customized when initializing the MetadataStore.
+
+#### Important Notes for Plugin Developers
+- The framework handles all metadata operations automatically
+- No plugin-specific code needed for metadata management
+- Schema migrations are handled transparently
+- All plugins share the same metadata database for consistency
+- Metadata includes service IDs, metric IDs, and display name formatting rules
 
 ### Data Flow
 

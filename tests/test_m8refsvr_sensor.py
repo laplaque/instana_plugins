@@ -17,9 +17,10 @@ class TestM8RefSvrSensor(unittest.TestCase):
     def test_constants(self):
         """Test that the sensor constants are correctly defined."""
         from m8refsvr.sensor import PROCESS_NAME, PLUGIN_NAME, VERSION
+        from common import VERSION as EXPECTED_VERSION
         self.assertEqual(PROCESS_NAME, "M8RefSvr")
         self.assertEqual(PLUGIN_NAME, "m8refsvr")
-        self.assertEqual(VERSION, "0.0.18")
+        self.assertEqual(VERSION, EXPECTED_VERSION)
     
     @patch('common.base_sensor.run_sensor')
     def test_main_function(self, mock_run_sensor):

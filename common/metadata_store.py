@@ -18,6 +18,12 @@ import re
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
+# Import schema version for migrations
+try:
+    from common import METADATA_SCHEMA_VERSION
+except ImportError:
+    METADATA_SCHEMA_VERSION = "1.0"  # Fallback if import fails
+
 logger = logging.getLogger(__name__)
 
 class MetadataStore:
@@ -61,14 +67,122 @@ class MetadataStore:
         self._init_db()
         
     def _init_db(self):
-        """Initialize the database schema if it doesn't exist."""
+        """Initialize the database schema and run migrations if needed."""
         try:
+            # Run schema migration first
+            self._run_migrations()
+            logger.debug("Database schema initialized successfully")
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error initializing database: {e}")
+            raise
+    
+    def _get_current_schema_version(self) -> Optional[str]:
+        """
+        Get the current schema version from the database.
+        
+        Returns:
+            Current schema version or None if no version table exists
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check if schema_version table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='schema_version'
+            """)
+            
+            if not cursor.fetchone():
+                conn.close()
+                return None
+                
+            # Get current version
+            cursor.execute("SELECT version FROM schema_version ORDER BY updated_date DESC LIMIT 1")
+            result = cursor.fetchone()
+            
+            conn.close()
+            return result[0] if result else None
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error getting schema version: {e}")
+            return None
+    
+    def _set_schema_version(self, version: str):
+        """
+        Set the current schema version in the database.
+        
+        Args:
+            version: Schema version to set
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Create schema_version table if it doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    version TEXT NOT NULL,
+                    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Insert new version record
+            now = datetime.now().isoformat()
+            cursor.execute("""
+                INSERT INTO schema_version (version, created_date, updated_date)
+                VALUES (?, ?, ?)
+            """, (version, now, now))
+            
+            conn.commit()
+            conn.close()
+            logger.info(f"Set schema version to: {version}")
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error setting schema version: {e}")
+            raise
+    
+    def _migrate_to_version_1_0(self):
+        """
+        Migrate database to schema version 1.0.
+        
+        For version 1.0, we delete any existing legacy database and create fresh schema.
+        """
+        try:
+            # Check if database file exists and has any tables
+            database_exists = os.path.exists(self.db_path)
+            has_legacy_data = False
+            
+            if database_exists:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                
+                # Check if any tables exist (indicating legacy data)
+                cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                """)
+                tables = cursor.fetchall()
+                has_legacy_data = len(tables) > 0
+                conn.close()
+            
+            if has_legacy_data:
+                logger.warning("Legacy metadata database detected. Previous metadata will be deleted and recreated for schema v1.0")
+                
+                # Delete the old database file
+                os.remove(self.db_path)
+                logger.info("Legacy metadata database deleted")
+            
+            # Create fresh database with v1.0 schema
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             # Create hosts table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS hosts (
+            CREATE TABLE hosts (
                 id TEXT PRIMARY KEY,
                 hostname TEXT UNIQUE,
                 first_seen TIMESTAMP,
@@ -78,7 +192,7 @@ class MetadataStore:
             
             # Create service_namespaces table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS service_namespaces (
+            CREATE TABLE service_namespaces (
                 id TEXT PRIMARY KEY,
                 namespace TEXT UNIQUE,
                 first_seen TIMESTAMP,
@@ -88,7 +202,7 @@ class MetadataStore:
             
             # Create services table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS services (
+            CREATE TABLE services (
                 id TEXT PRIMARY KEY,
                 full_name TEXT UNIQUE,
                 display_name TEXT,
@@ -105,7 +219,7 @@ class MetadataStore:
             
             # Create metrics table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS metrics (
+            CREATE TABLE metrics (
                 id TEXT PRIMARY KEY,
                 service_id TEXT,
                 name TEXT,
@@ -122,12 +236,9 @@ class MetadataStore:
             )
             """)
             
-            # Run database migrations for existing databases
-            self._migrate_database(cursor)
-            
             # Create format rules table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS format_rules (
+            CREATE TABLE format_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 pattern TEXT UNIQUE,
                 replacement TEXT,
@@ -136,7 +247,7 @@ class MetadataStore:
             )
             """)
             
-            # Add default format rules if they don't exist
+            # Add default format rules
             default_rules = [
                 ("cpu", "CPU", "word_replacement", 100),
                 ("_", " ", "character_replacement", 50),
@@ -145,49 +256,46 @@ class MetadataStore:
             
             for pattern, replacement, rule_type, priority in default_rules:
                 cursor.execute("""
-                INSERT OR IGNORE INTO format_rules
+                INSERT INTO format_rules
                 (pattern, replacement, rule_type, priority)
                 VALUES (?, ?, ?, ?)
                 """, (pattern, replacement, rule_type, priority))
             
             conn.commit()
             conn.close()
-            logger.debug("Database schema initialized successfully")
             
-        except sqlite3.Error as e:
-            logger.error(f"Error initializing database: {e}")
+            # Set schema version
+            self._set_schema_version("1.0")
+            logger.info("Database migrated to schema version 1.0")
+            
+        except (sqlite3.Error, OSError) as e:
+            logger.error(f"Error migrating to version 1.0: {e}")
             raise
     
-    def _migrate_database(self, cursor):
+    def _run_migrations(self):
         """
-        Migrate existing database to add missing columns.
+        Run database migrations to bring schema up to current version.
+        """
+        current_version = self._get_current_schema_version()
+        target_version = METADATA_SCHEMA_VERSION
         
-        Args:
-            cursor: SQLite cursor for executing migrations
-        """
-        try:
-            # Check if host_id column exists in services table
-            cursor.execute("PRAGMA table_info(services)")
-            columns = [column[1] for column in cursor.fetchall()]
+        logger.debug(f"Current schema version: {current_version}, Target: {target_version}")
+        
+        if current_version is None:
+            # No version info - treat as legacy or new database
+            logger.info("No schema version found, migrating to version 1.0")
+            self._migrate_to_version_1_0()
             
-            if 'host_id' not in columns:
-                logger.info("Adding host_id column to services table")
-                cursor.execute("ALTER TABLE services ADD COLUMN host_id TEXT")
-                cursor.execute("ALTER TABLE services ADD COLUMN namespace_id TEXT")
+        elif current_version != target_version:
+            # Version mismatch - for now, only handle 1.0
+            if target_version == "1.0":
+                logger.info(f"Migrating from version {current_version} to {target_version}")
+                self._migrate_to_version_1_0()
+            else:
+                logger.warning(f"Unknown target version {target_version}, staying at {current_version}")
                 
-            # Check if is_counter column exists in metrics table
-            cursor.execute("PRAGMA table_info(metrics)")
-            columns = [column[1] for column in cursor.fetchall()]
-            
-            if 'is_counter' not in columns:
-                logger.info("Adding is_counter column to metrics table")
-                cursor.execute("ALTER TABLE metrics ADD COLUMN is_counter BOOLEAN DEFAULT 0")
-                
-            logger.debug("Database migration completed")
-            
-        except sqlite3.Error as e:
-            logger.warning(f"Error during database migration: {e}")
-            # Don't raise - this is non-critical
+        else:
+            logger.debug(f"Schema is already at target version {target_version}")
             
     def get_or_create_host(self, hostname: str) -> str:
         """
