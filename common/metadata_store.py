@@ -35,6 +35,41 @@ class MetadataStore:
     formatting of metric names and values.
     """
     
+    def sanitize_for_metrics(self, input_string: str) -> str:
+        """
+        Convert any string to safe technical identifier using only [a-z0-9_].
+        
+        This function sanitizes service names and metric names to ensure they
+        are compatible with OpenTelemetry, databases, and monitoring systems.
+        
+        Args:
+            input_string: Raw string that may contain special characters
+            
+        Returns:
+            Sanitized string safe for technical use
+        """
+        if not input_string:
+            return 'unknown'
+            
+        # 1. Convert to lowercase
+        result = input_string.lower()
+        
+        # 2. Replace ANY non-alphanumeric character with underscore
+        result = re.sub(r'[^a-z0-9]', '_', result)
+        
+        # 3. Collapse multiple underscores into single underscore
+        result = re.sub(r'_+', '_', result)
+        
+        # 4. Remove leading/trailing underscores
+        result = result.strip('_')
+        
+        # 5. Ensure it starts with a letter (prefix if needed)
+        if result and result[0].isdigit():
+            result = 'metric_' + result
+        
+        # 6. Handle empty result
+        return result or 'unknown'
+    
     def __init__(self, db_path: Optional[str] = None):
         """
         Initialize the metadata store.
@@ -412,7 +447,7 @@ class MetadataStore:
         Get existing service ID or create a new one if it doesn't exist.
         
         Args:
-            full_name: Full service name (e.g., com.instana.plugin.python.microstrategy_m8mulprc)
+            full_name: Raw service name that will be sanitized for storage
             version: Service version (optional)
             description: Service description (optional)
             hostname: Hostname where the service is running (optional)
@@ -425,13 +460,16 @@ class MetadataStore:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Extract display name from full name (part after python)
+            # Sanitize full name for technical storage
+            sanitized_name = self.sanitize_for_metrics(full_name)
+            
+            # Extract display name from original full name for human readability
             display_name = self._extract_service_display_name(full_name)
             
-            # Check if service exists
+            # Check if service exists using sanitized name
             cursor.execute(
                 "SELECT id, display_name FROM services WHERE full_name = ?",
-                (full_name,)
+                (sanitized_name,)
             )
             result = cursor.fetchone()
             
@@ -487,10 +525,10 @@ class MetadataStore:
                     (id, full_name, display_name, version, description, host_id, namespace_id, first_seen, last_seen)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (service_id, full_name, display_name, version, description, host_id, namespace_id, now, now)
+                    (service_id, sanitized_name, display_name, version, description, host_id, namespace_id, now, now)
                 )
                 conn.commit()
-                logger.info(f"Created new service: {full_name} (ID: {service_id})")
+                logger.info(f"Created new service: {full_name} → {sanitized_name} (ID: {service_id})")
                 
             conn.close()
             return service_id, display_name

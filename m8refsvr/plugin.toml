@@ -1,0 +1,29 @@
+[metadata]
+service_namespace = "Strategy₿"
+process_name = "M8RefSvr"
+plugin_name = "m8refsvr"
+description = "Strategy₿ Reference Server monitoring"
+author = "laplaque/instana_plugins Contributors"
+
+[monitoring]
+default_interval = 60
+process_patterns = ["M8RefSvr", "m8refsvr"]
+metric_types = ["cpu", "memory", "io", "network"]
+supports_discovery = true
+log_process_details = true
+
+[installation]
+systemd_service_name = "instana-m8refsvr-monitor"
+service_description = "Instana Strategy₿ M8RefSvr Monitor"
+default_base_dir = "/opt/instana_plugins"
+requires_root = false
+creates_logs_directory = true
+
+[dependencies]
+python_min_version = "3.6"
+additional_packages = []
+
+[otel_config]
+default_agent_host = "localhost"
+default_agent_port = 4317
+service_name_template = "{service_namespace}.{process_name}"
