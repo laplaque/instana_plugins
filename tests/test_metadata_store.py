@@ -37,7 +37,7 @@ class TestMetadataStore(unittest.TestCase):
     def test_service_creation(self):
         """Test creating a service and retrieving its details"""
         # Create a service with version from common/__init__.py
-        service_name = "com.instana.plugin.python.microstrategy_m8mulprc"
+        service_name = "com.instana.plugin.python.m8mulprc"
         description = "MicroStrategy M8 Multi-purpose Process Monitor"
         
         service_id, display_name = self.store.get_or_create_service(
@@ -52,7 +52,7 @@ class TestMetadataStore(unittest.TestCase):
         
         # Verify display name extraction (should remove com.instana.plugin.python. prefix)
         self.assertNotIn("com.instana.plugin.python.", display_name)
-        self.assertIn("microstrategy", display_name.lower())
+        self.assertIn("m8mulprc", display_name.lower())
         
         # Get the service again - should return the same ID
         service_id2, _ = self.store.get_or_create_service(service_name)
@@ -167,7 +167,7 @@ class TestMetadataStore(unittest.TestCase):
     def test_extract_service_display_name(self):
         """Test extracting display names from service full names"""
         test_cases = [
-            ("com.instana.plugin.python.microstrategy_m8mulprc", "Microstrategy M8mulprc"),
+            ("com.instana.plugin.python.m8mulprc", "M8mulprc"),
             ("com.instana.plugin.python.m8refsvr", "M8refsvr"),
             ("com.instana.plugin.java.tomcat", "Tomcat"),
             ("standalone_service", "Standalone Service")  # Fallback case

@@ -1,6 +1,6 @@
 # M8PrcSvr Sensor
 
-This sensor monitors the MicroStrategy M8PrcSvr process and reports metrics to Instana.
+This sensor monitors the Strategy₿ M8PrcSvr process and reports metrics to Instana.
 
 ## Installation
 

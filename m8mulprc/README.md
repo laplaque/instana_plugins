@@ -1,14 +1,14 @@
 # M8MulPrc Plugin for Instana
 
-A custom Instana plugin for monitoring MicroStrategy M8MulPrc processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
+A custom Instana plugin for monitoring Strategy₿ M8MulPrc processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
 
 ## Overview
 
-The M8MulPrc plugin monitors the MicroStrategy Multi-Process Server component, providing real-time visibility into its resource usage and performance characteristics.
+The M8MulPrc plugin monitors the Strategy₿ Multi-Process Server component, providing real-time visibility into its resource usage and performance characteristics.
 
 ## Features
 
-- Real-time monitoring of MicroStrategy M8MulPrc processes
+- Real-time monitoring of Strategy₿ M8MulPrc processes
 - Case-insensitive process detection for flexibility
 - Detailed resource usage metrics collection
 - OpenTelemetry integration for seamless Instana reporting
@@ -35,7 +35,7 @@ The M8MulPrc plugin monitors the MicroStrategy Multi-Process Server component, p
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
 
-- MicroStrategy environment with M8MulPrc processes
+- Strategy₿ environment with M8MulPrc processes
 
 ## Installation
 
@@ -254,7 +254,7 @@ If metrics aren't appearing in Instana:
 
 1. **Process Not Found**:
    - If you see "No processes found matching 'M8MulPrc'" in the logs, verify that:
-     - The MicroStrategy M8MulPrc process is running
+     - The Strategy₿ M8MulPrc process is running
      - The process name matches (case-insensitive matching is used)
      - You have permissions to view process information
 

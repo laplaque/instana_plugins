@@ -96,7 +96,9 @@ class TestBaseSensor(unittest.TestCase):
             resource_attributes={
                 "process.name": "TestProcess",
                 "host.name": os.uname()[1]
-            }
+            },
+            metadata_db_path=None,
+            service_namespace="Unknown"
         )
         
         # Verify metrics collection
@@ -158,11 +160,13 @@ class TestBaseSensor(unittest.TestCase):
         # Verify shutdown was called
         mock_connector_instance.shutdown.assert_called_once()
 
+    @patch('common.base_sensor.setup_logging')
+    @patch('common.base_sensor.daemonize')
     @patch('common.base_sensor.parse_args')
     @patch('common.base_sensor.monitor_process')
     @patch('common.base_sensor.logging.getLogger')
     @patch('sys.exit')
-    def test_run_sensor_once(self, mock_exit, mock_get_logger, mock_monitor, mock_parse_args):
+    def test_run_sensor_once(self, mock_exit, mock_get_logger, mock_monitor, mock_parse_args, mock_daemonize, mock_setup_logging):
         """Test run_sensor with --once flag."""
         # Mock args
         mock_args = MagicMock()
@@ -171,6 +175,10 @@ class TestBaseSensor(unittest.TestCase):
         mock_args.interval = 30
         mock_args.once = True
         mock_args.log_level = "DEBUG"
+        mock_args.stop = False
+        mock_args.restart = False
+        mock_args.install_location = "/usr/local/bin"
+        mock_args.log_file = None
         mock_parse_args.return_value = mock_args
         
         # Mock logger
@@ -193,17 +201,21 @@ class TestBaseSensor(unittest.TestCase):
             agent_host="test-host",
             agent_port=1234,
             interval=30,
-            run_once=True
+            run_once=True,
+            metadata_db_path=mock_args.metadata_db_path,
+            service_namespace="Unknown"
         )
         
         # Verify sys.exit was called with 0 (success)
         mock_exit.assert_called_once_with(0)
 
+    @patch('common.base_sensor.setup_logging')
+    @patch('common.base_sensor.daemonize')
     @patch('common.base_sensor.parse_args')
     @patch('common.base_sensor.monitor_process')
     @patch('common.base_sensor.logging.getLogger')
     @patch('sys.exit')
-    def test_run_sensor_continuous(self, mock_exit, mock_get_logger, mock_monitor, mock_parse_args):
+    def test_run_sensor_continuous(self, mock_exit, mock_get_logger, mock_monitor, mock_parse_args, mock_daemonize, mock_setup_logging):
         """Test run_sensor with continuous monitoring."""
         # Mock args
         mock_args = MagicMock()
@@ -212,6 +224,10 @@ class TestBaseSensor(unittest.TestCase):
         mock_args.interval = 30
         mock_args.once = False
         mock_args.log_level = "DEBUG"
+        mock_args.stop = False
+        mock_args.restart = False
+        mock_args.install_location = "/usr/local/bin"
+        mock_args.log_file = None
         mock_parse_args.return_value = mock_args
         
         # Mock logger
@@ -230,7 +246,9 @@ class TestBaseSensor(unittest.TestCase):
             plugin_name="test.plugin",
             agent_host="test-host",
             agent_port=1234,
-            interval=30
+            interval=30,
+            metadata_db_path=mock_args.metadata_db_path,
+            service_namespace="Unknown"
         )
         
         # Verify sys.exit was not called

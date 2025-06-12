@@ -18,6 +18,12 @@ import re
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
+# Import schema version for migrations
+try:
+    from common import METADATA_SCHEMA_VERSION
+except ImportError:
+    METADATA_SCHEMA_VERSION = "1.0"  # Fallback if import fails
+
 logger = logging.getLogger(__name__)
 
 class MetadataStore:
@@ -61,10 +67,138 @@ class MetadataStore:
         self._init_db()
         
     def _init_db(self):
-        """Initialize the database schema if it doesn't exist."""
+        """Initialize the database schema and run migrations if needed."""
+        try:
+            # Run schema migration first
+            self._run_migrations()
+            logger.debug("Database schema initialized successfully")
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error initializing database: {e}")
+            raise
+    
+    def _get_current_schema_version(self) -> Optional[str]:
+        """
+        Get the current schema version from the database.
+        
+        Returns:
+            Current schema version or None if no version table exists
+        """
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+            
+            # Check if schema_version table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='schema_version'
+            """)
+            
+            if not cursor.fetchone():
+                conn.close()
+                return None
+                
+            # Get current version
+            cursor.execute("SELECT version FROM schema_version ORDER BY updated_date DESC LIMIT 1")
+            result = cursor.fetchone()
+            
+            conn.close()
+            return result[0] if result else None
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error getting schema version: {e}")
+            return None
+    
+    def _set_schema_version(self, version: str):
+        """
+        Set the current schema version in the database.
+        
+        Args:
+            version: Schema version to set
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Create schema_version table if it doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    version TEXT NOT NULL,
+                    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Insert new version record
+            now = datetime.now().isoformat()
+            cursor.execute("""
+                INSERT INTO schema_version (version, created_date, updated_date)
+                VALUES (?, ?, ?)
+            """, (version, now, now))
+            
+            conn.commit()
+            conn.close()
+            logger.info(f"Set schema version to: {version}")
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error setting schema version: {e}")
+            raise
+    
+    def _migrate_to_version_1_0(self):
+        """
+        Migrate database to schema version 1.0.
+        
+        For version 1.0, we delete any existing legacy database and create fresh schema.
+        """
+        try:
+            # Check if database file exists and has any tables
+            database_exists = os.path.exists(self.db_path)
+            has_legacy_data = False
+            
+            if database_exists:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                
+                # Check if any tables exist (indicating legacy data)
+                cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                """)
+                tables = cursor.fetchall()
+                has_legacy_data = len(tables) > 0
+                conn.close()
+            
+            if has_legacy_data:
+                logger.warning("Legacy metadata database detected. Previous metadata will be deleted and recreated for schema v1.0")
+                
+                # Delete the old database file
+                os.remove(self.db_path)
+                logger.info("Legacy metadata database deleted")
+            
+            # Create fresh database with v1.0 schema
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Create hosts table
+            cursor.execute("""
+            CREATE TABLE hosts (
+                id TEXT PRIMARY KEY,
+                hostname TEXT UNIQUE,
+                first_seen TIMESTAMP,
+                last_seen TIMESTAMP
+            )
+            """)
+            
+            # Create service_namespaces table
+            cursor.execute("""
+            CREATE TABLE service_namespaces (
+                id TEXT PRIMARY KEY,
+                namespace TEXT UNIQUE,
+                first_seen TIMESTAMP,
+                last_seen TIMESTAMP
+            )
+            """)
             
             # Create services table
             cursor.execute("""
@@ -74,14 +208,18 @@ class MetadataStore:
                 display_name TEXT,
                 version TEXT,
                 description TEXT,
+                host_id TEXT,
+                namespace_id TEXT,
                 first_seen TIMESTAMP,
-                last_seen TIMESTAMP
+                last_seen TIMESTAMP,
+                FOREIGN KEY (host_id) REFERENCES hosts(id),
+                FOREIGN KEY (namespace_id) REFERENCES service_namespaces(id)
             )
             """)
             
             # Create metrics table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS metrics (
+            CREATE TABLE metrics (
                 id TEXT PRIMARY KEY,
                 service_id TEXT,
                 name TEXT,
@@ -100,7 +238,7 @@ class MetadataStore:
             
             # Create format rules table
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS format_rules (
+            CREATE TABLE format_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 pattern TEXT UNIQUE,
                 replacement TEXT,
@@ -109,7 +247,7 @@ class MetadataStore:
             )
             """)
             
-            # Add default format rules if they don't exist
+            # Add default format rules
             default_rules = [
                 ("cpu", "CPU", "word_replacement", 100),
                 ("_", " ", "character_replacement", 50),
@@ -118,20 +256,158 @@ class MetadataStore:
             
             for pattern, replacement, rule_type, priority in default_rules:
                 cursor.execute("""
-                INSERT OR IGNORE INTO format_rules
+                INSERT INTO format_rules
                 (pattern, replacement, rule_type, priority)
                 VALUES (?, ?, ?, ?)
                 """, (pattern, replacement, rule_type, priority))
             
             conn.commit()
             conn.close()
-            logger.debug("Database schema initialized successfully")
+            
+            # Set schema version
+            self._set_schema_version("1.0")
+            logger.info("Database migrated to schema version 1.0")
+            
+        except (sqlite3.Error, OSError) as e:
+            logger.error(f"Error migrating to version 1.0: {e}")
+            raise
+    
+    def _run_migrations(self):
+        """
+        Run database migrations to bring schema up to current version.
+        """
+        current_version = self._get_current_schema_version()
+        target_version = METADATA_SCHEMA_VERSION
+        
+        logger.debug(f"Current schema version: {current_version}, Target: {target_version}")
+        
+        if current_version is None:
+            # No version info - treat as legacy or new database
+            logger.info("No schema version found, migrating to version 1.0")
+            self._migrate_to_version_1_0()
+            
+        elif current_version != target_version:
+            # Version mismatch - for now, only handle 1.0
+            if target_version == "1.0":
+                logger.info(f"Migrating from version {current_version} to {target_version}")
+                self._migrate_to_version_1_0()
+            else:
+                logger.warning(f"Unknown target version {target_version}, staying at {current_version}")
+                
+        else:
+            logger.debug(f"Schema is already at target version {target_version}")
+            
+    def get_or_create_host(self, hostname: str) -> str:
+        """
+        Get existing host ID or create a new one if it doesn't exist.
+        
+        Args:
+            hostname: Hostname of the system
+            
+        Returns:
+            Host UUID
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check if host exists
+            cursor.execute(
+                "SELECT id FROM hosts WHERE hostname = ?",
+                (hostname,)
+            )
+            result = cursor.fetchone()
+            
+            now = datetime.now().isoformat()
+            
+            if result:
+                # Host exists, update last_seen
+                host_id = result[0]
+                cursor.execute(
+                    "UPDATE hosts SET last_seen = ? WHERE id = ?",
+                    (now, host_id)
+                )
+                conn.commit()
+                logger.debug(f"Using existing host: {hostname} (ID: {host_id})")
+                
+            else:
+                # Host doesn't exist, create new
+                host_id = str(uuid.uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO hosts 
+                    (id, hostname, first_seen, last_seen)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (host_id, hostname, now, now)
+                )
+                conn.commit()
+                logger.info(f"Created new host: {hostname} (ID: {host_id})")
+                
+            conn.close()
+            return host_id
             
         except sqlite3.Error as e:
-            logger.error(f"Error initializing database: {e}")
-            raise
+            logger.error(f"Error in get_or_create_host: {e}")
+            # Fall back to generating an ID without persistence
+            return str(uuid.uuid4())
+    
+    def get_or_create_service_namespace(self, namespace: str) -> str:
+        """
+        Get existing service namespace ID or create a new one if it doesn't exist.
+        
+        Args:
+            namespace: Service namespace (e.g., MicroStrategy)
             
-    def get_or_create_service(self, full_name: str, version: str = "", description: str = "") -> Tuple[str, str]:
+        Returns:
+            Service namespace UUID
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check if namespace exists
+            cursor.execute(
+                "SELECT id FROM service_namespaces WHERE namespace = ?",
+                (namespace,)
+            )
+            result = cursor.fetchone()
+            
+            now = datetime.now().isoformat()
+            
+            if result:
+                # Namespace exists, update last_seen
+                namespace_id = result[0]
+                cursor.execute(
+                    "UPDATE service_namespaces SET last_seen = ? WHERE id = ?",
+                    (now, namespace_id)
+                )
+                conn.commit()
+                logger.debug(f"Using existing namespace: {namespace} (ID: {namespace_id})")
+                
+            else:
+                # Namespace doesn't exist, create new
+                namespace_id = str(uuid.uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO service_namespaces 
+                    (id, namespace, first_seen, last_seen)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (namespace_id, namespace, now, now)
+                )
+                conn.commit()
+                logger.info(f"Created new namespace: {namespace} (ID: {namespace_id})")
+                
+            conn.close()
+            return namespace_id
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error in get_or_create_service_namespace: {e}")
+            # Fall back to generating an ID without persistence
+            return str(uuid.uuid4())
+
+    def get_or_create_service(self, full_name: str, version: str = "", description: str = "", hostname: str = "", service_namespace: str = "") -> Tuple[str, str]:
         """
         Get existing service ID or create a new one if it doesn't exist.
         
@@ -139,6 +415,8 @@ class MetadataStore:
             full_name: Full service name (e.g., com.instana.plugin.python.microstrategy_m8mulprc)
             version: Service version (optional)
             description: Service description (optional)
+            hostname: Hostname where the service is running (optional)
+            service_namespace: Service namespace for grouping (optional)
             
         Returns:
             Tuple of (service_id, display_name)
@@ -158,6 +436,15 @@ class MetadataStore:
             result = cursor.fetchone()
             
             now = datetime.now().isoformat()
+            
+            # Get or create host and namespace IDs if provided
+            host_id = None
+            if hostname:
+                host_id = self.get_or_create_host(hostname)
+                
+            namespace_id = None
+            if service_namespace:
+                namespace_id = self.get_or_create_service_namespace(service_namespace)
             
             if result:
                 # Service exists, update last_seen
@@ -182,10 +469,10 @@ class MetadataStore:
                 cursor.execute(
                     """
                     UPDATE services 
-                    SET display_name = ?, version = ?, description = ?, last_seen = ? 
+                    SET display_name = ?, version = ?, description = ?, host_id = ?, namespace_id = ?, last_seen = ? 
                     WHERE id = ?
                     """,
-                    (display_name, version, description, now, service_id)
+                    (display_name, version, description, host_id, namespace_id, now, service_id)
                 )
                 
                 conn.commit()
@@ -197,10 +484,10 @@ class MetadataStore:
                 cursor.execute(
                     """
                     INSERT INTO services 
-                    (id, full_name, display_name, version, description, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (id, full_name, display_name, version, description, host_id, namespace_id, first_seen, last_seen)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (service_id, full_name, display_name, version, description, now, now)
+                    (service_id, full_name, display_name, version, description, host_id, namespace_id, now, now)
                 )
                 conn.commit()
                 logger.info(f"Created new service: {full_name} (ID: {service_id})")
@@ -542,19 +829,16 @@ class MetadataStore:
         
     def get_simple_metric_name(self, full_metric_name: str) -> str:
         """
-        Extract a simple, display-friendly name from a fully qualified metric name.
+        Extract a simple, OpenTelemetry-compliant name from a fully qualified metric name.
         
-        This function handles various metric naming conventions:
-        - Extracts the last component after '/'
-        - Falls back to splitting on '.' if no '/' is present
-        - Removes any {} suffixes that might be present (for parameterized metrics)
-        - Handles edge cases like empty strings
+        This function handles various metric naming conventions and returns names that
+        comply with OpenTelemetry requirements (ASCII, <=63 chars, no spaces).
         
         Args:
             full_metric_name: The fully qualified metric name
             
         Returns:
-            The simple metric name for display
+            The simple metric name for OpenTelemetry registration (not display)
         """
         if not full_metric_name:
             return "unknown"
@@ -571,6 +855,8 @@ class MetadataStore:
         # Remove any {} suffixes (for parameterized metrics)
         simple_name = re.sub(r'\{.*\}$', '', simple_name)
         
+        # Return the simple name without formatting for OpenTelemetry compliance
+        # (formatting is handled separately for display purposes)
         return simple_name.strip()
     
     def format_metric_value(
@@ -596,9 +882,9 @@ class MetadataStore:
         if is_percentage and value <= 1.0:
             value = value * 100.0
             
-        # For counters, return as integer
+        # For counters, return as integer (rounded)
         if is_counter:
-            return int(value)
+            return int(round(value))
             
         # Otherwise round to specified decimal places
         return round(value, decimal_places)
