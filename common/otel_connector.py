@@ -190,7 +190,25 @@ class InstanaOTelConnector:
             logger.warning(f"OpenTelemetry is not available. Metrics and traces will not be sent.")
             logger.warning(f"To enable OpenTelemetry, install required packages:")
             logger.warning(f"pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp")
+    
+    def _handle_connection_error(self, error, component_name):
+        """
+        Handle ConnectionError consistently across tracing and metrics setup.
         
+        Args:
+            error: The ConnectionError that occurred
+            component_name: Name of the component ("tracing" or "metrics")
+            
+        Returns:
+            MagicMock: A mock exporter for testing/fallback scenarios
+        """
+        logger.error(f"Error setting up {component_name}: {error}")
+        logger.warning(f"Using mock exporter for {component_name} (likely in test environment)")
+        
+        # Import MagicMock here to avoid import at module level
+        from unittest.mock import MagicMock
+        return MagicMock()
+
     def _setup_tracing(self):
         """Set up the OpenTelemetry tracer provider and exporter."""
         if not OPENTELEMETRY_AVAILABLE:
@@ -226,9 +244,7 @@ class InstanaOTelConnector:
                         **tls_config
                     )
                 except ConnectionError as e:
-                    logger.error(f"Error setting up tracing: {e}")
-                    # Create a dummy exporter for tests
-                    span_exporter = MagicMock()
+                    span_exporter = self._handle_connection_error(e, "tracing")
                     return
             else:
                 # Use standard non-TLS endpoint
@@ -237,9 +253,7 @@ class InstanaOTelConnector:
                 try:
                     span_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
                 except ConnectionError as e:
-                    logger.error(f"Error setting up tracing: {e}")
-                    # Create a dummy exporter for tests
-                    span_exporter = MagicMock()
+                    span_exporter = self._handle_connection_error(e, "tracing")
                     return
             
             # Create and set the tracer provider
