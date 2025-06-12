@@ -1,22 +1,32 @@
-# Instana Plugins Collection
+# Generic OpenTelemetry Process Monitoring Framework for Instana
 
-A collection of custom plugins for Instana monitoring of MicroStrategy processes.
-A collection of custom plugins for Instana monitoring of MicroStrategy processes.
+A extensible framework for creating custom Instana plugins that monitor any processes using OpenTelemetry. This repository provides a robust, reusable foundation for process monitoring with Strategy₿ implementations as reference examples.
 
-## Available Plugins
+## Framework Features
 
-- [M8MulPrc Plugin](m8mulprc/README.md) - Monitor MicroStrategy M8MulPrc processes
-- [M8PrcSvr Plugin](m8prcsvr/README.md) - Monitor MicroStrategy M8PrcSvr processes
-- [M8RefSvr Plugin](m8refsvr/README.md) - Monitor MicroStrategy M8RefSvr processes
-- [MSTRSvr Plugin](mstrsvr/README.md) - Monitor MicroStrategy Intelligence Server processes
+- **Generic Process Monitoring**: Monitor any processes by name or pattern matching
+- **OpenTelemetry Integration**: Modern OTLP protocol for seamless Instana integration
+- **Extensible Architecture**: Clean, modular design for easy customization
+- **Production Ready**: TLS encryption, proper error handling, comprehensive logging
+- **Developer Friendly**: Simple plugin creation with comprehensive documentation
 
-## Features
+## Strategy₿ Reference Implementations
 
-- Process-specific monitoring for MicroStrategy components
-- Case-insensitive process detection
-- Process resource usage tracking
-- OpenTelemetry integration for metrics and traces
-- Easy installation with automatic configuration
+The following plugins demonstrate the framework's capabilities:
+
+- [M8MulPrc Plugin](m8mulprc/README.md) - Monitor Strategy₿ M8MulPrc processes
+- [M8PrcSvr Plugin](m8prcsvr/README.md) - Monitor Strategy₿ M8PrcSvr processes
+- [M8RefSvr Plugin](m8refsvr/README.md) - Monitor Strategy₿ M8RefSvr processes
+- [MSTRSvr Plugin](mstrsvr/README.md) - Monitor Strategy₿ Intelligence Server processes
+
+## Core Capabilities
+
+- **Universal Process Detection**: Case-insensitive process matching with regex support
+- **Comprehensive Metrics**: CPU, memory, I/O, file descriptors, threads, context switches
+- **Flexible Configuration**: Environment variables, command-line options, config files
+- **Robust Error Handling**: Graceful failure recovery and detailed logging
+- **Security First**: TLS encryption, minimal privileges, secure credential handling
+- **Easy Installation**: Automated installation scripts with systemd service creation
 
 ## Common Metrics Collected
 
@@ -32,7 +42,7 @@ A collection of custom plugins for Instana monitoring of MicroStrategy processes
 
 ```mermaid
 graph TD
-    subgraph "MicroStrategy Server"
+    subgraph "Strategy₿ Server"
         M8["M8MulPrc Process"] 
         M8P["M8PrcSvr Process"]
         M8R["M8RefSvr Process"]
@@ -97,7 +107,15 @@ graph TD
     class METRICS,TRACES,UI backend;
 ```
 
-## Requirements
+## Getting Started
+
+### For Plugin Developers
+
+If you want to create your own process monitoring plugins using this framework:
+
+📖 **[Developer's Guide](DEVELOPER_GUIDE.md)** - Complete guide for creating custom plugins
+
+### Requirements
 
 - Instana Agent 1.2.0 or higher
 - Python 3.6 or higher
@@ -107,7 +125,7 @@ graph TD
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
 
-- MicroStrategy environment
+- Target processes to monitor (any application or service)
 
 ## Installation
 
@@ -207,7 +225,7 @@ If you prefer to avoid using sudo, you can manually install the plugins:
 
 To minimize the permissions needed:
 
-- Run the Instana agent as the same user that runs your MicroStrategy processes
+- Run the Instana agent as the same user that runs your Strategy₿ processes
 - Configure the agent to allow non-root access to its directories
 - Use Linux capabilities instead of full root access:
 
@@ -224,7 +242,7 @@ The plugins use a common framework for process monitoring and OpenTelemetry inte
 - `common/logging_config.py` - Centralized logging configuration
 - `common/base_sensor.py` - Common sensor functionality
 
-Each plugin implements a sensor that uses these common components to monitor specific MicroStrategy processes.
+Each plugin implements a sensor that uses these common components to monitor specific Strategy₿ processes.
 
 ## Scheduling and Frequency
 
@@ -260,7 +278,7 @@ The plugins can be scheduled to run in different ways:
 - **Production environments**: Every 30-60 seconds
 - **Development/Testing**: Every 5-15 seconds for more detailed data
 - **Resource-constrained systems**: Every 5 minutes to reduce overhead
-- **High-load MicroStrategy servers**: Every 1-2 minutes to balance monitoring with performance
+- **High-load Strategy₿ servers**: Every 1-2 minutes to balance monitoring with performance
 
 The optimal frequency depends on your monitoring needs and system resources. More frequent collection provides better visibility but increases overhead.
 
@@ -507,8 +525,8 @@ python -m unittest discover tests
    - Docker containers may require additional privileges to access host process information
 
 6. **High Availability Setups**:
-   - In HA MicroStrategy environments with multiple servers, each server needs its own plugin instance
-   - The plugin doesn't automatically discover or monitor new MicroStrategy instances
+   - In HA Strategy₿ environments with multiple servers, each server needs its own plugin instance
+   - The plugin doesn't automatically discover or monitor new Strategy₿ instances
    - Manual configuration is needed when adding new servers to the environment
 
 ## Release Notes

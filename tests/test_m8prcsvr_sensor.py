@@ -19,8 +19,8 @@ class TestM8PrcSvrSensor(unittest.TestCase):
         from m8prcsvr.sensor import PROCESS_NAME, PLUGIN_NAME, VERSION
         
         self.assertEqual(PROCESS_NAME, "M8PrcSvr")
-        self.assertEqual(PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8prcsvr")
-        self.assertEqual(VERSION, "0.0.10")
+        self.assertEqual(PLUGIN_NAME, "m8prcsvr")
+        self.assertEqual(VERSION, "0.0.18")
     
     @patch('common.base_sensor.run_sensor')
     def test_main_function(self, mock_run_sensor):
@@ -33,8 +33,8 @@ class TestM8PrcSvrSensor(unittest.TestCase):
             m8prcsvr.sensor.run_sensor = mock_run_sensor  # Mock the run_sensor function
             # Since we can't directly call __main__ code, we test the function call
             mock_run_sensor.assert_not_called()  # Should not be called yet
-            m8prcsvr.sensor.run_sensor(PROCESS_NAME, PLUGIN_NAME, VERSION)
-            mock_run_sensor.assert_called_once_with(PROCESS_NAME, PLUGIN_NAME, VERSION)
+            m8prcsvr.sensor.run_sensor(PROCESS_NAME, PLUGIN_NAME, VERSION, service_namespace="MicroStrategy")
+            mock_run_sensor.assert_called_once_with(PROCESS_NAME, PLUGIN_NAME, VERSION, service_namespace="MicroStrategy")
 
 if __name__ == '__main__':
     unittest.main()

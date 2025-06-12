@@ -29,26 +29,23 @@ def test_env_variables():
     os.environ['CLIENT_KEY_PATH'] = '/path/to/client.key'
     
     # Read and parse them back
-    try:
-        use_tls = bool(strtobool(os.environ.get('USE_TLS', 'false')))
-        ca_cert_path = os.environ.get('CA_CERT_PATH')
-        client_cert_path = os.environ.get('CLIENT_CERT_PATH')
-        client_key_path = os.environ.get('CLIENT_KEY_PATH')
-        
-        logger.info(f"USE_TLS parsed as: {use_tls}")
-        logger.info(f"CA_CERT_PATH: {ca_cert_path}")
-        logger.info(f"CLIENT_CERT_PATH: {client_cert_path}")
-        logger.info(f"CLIENT_KEY_PATH: {client_key_path}")
-        
-        if use_tls and ca_cert_path and client_cert_path and client_key_path:
-            logger.info("✅ All TLS environment variables are correctly set and parsed")
-            return True
-        else:
-            logger.error("❌ Some TLS environment variables were not correctly set or parsed")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Error parsing TLS environment variables: {e}")
-        return False
+    use_tls = bool(strtobool(os.environ.get('USE_TLS', 'false')))
+    ca_cert_path = os.environ.get('CA_CERT_PATH')
+    client_cert_path = os.environ.get('CLIENT_CERT_PATH')
+    client_key_path = os.environ.get('CLIENT_KEY_PATH')
+    
+    logger.info(f"USE_TLS parsed as: {use_tls}")
+    logger.info(f"CA_CERT_PATH: {ca_cert_path}")
+    logger.info(f"CLIENT_CERT_PATH: {client_cert_path}")
+    logger.info(f"CLIENT_KEY_PATH: {client_key_path}")
+    
+    # Use assertions instead of return values for pytest
+    assert use_tls is True, "USE_TLS should be True"
+    assert ca_cert_path == '/path/to/ca.crt', "CA_CERT_PATH not set correctly"
+    assert client_cert_path == '/path/to/client.crt', "CLIENT_CERT_PATH not set correctly"
+    assert client_key_path == '/path/to/client.key', "CLIENT_KEY_PATH not set correctly"
+    
+    logger.info("✅ All TLS environment variables are correctly set and parsed")
 
 def test_url_construction():
     """Test URL construction with TLS"""
@@ -61,12 +58,10 @@ def test_url_construction():
     otlp_endpoint = f"{protocol}{agent_host}:{agent_port}"
     
     logger.info(f"TLS endpoint: {otlp_endpoint}")
-    if otlp_endpoint == "https://localhost:4317":
-        logger.info("✅ TLS URL construction is correct")
-        return True
-    else:
-        logger.error("❌ TLS URL construction is incorrect")
-        return False
+    
+    # Use assertion instead of return value for pytest
+    assert otlp_endpoint == "https://localhost:4317", "TLS URL construction is incorrect"
+    logger.info("✅ TLS URL construction is correct")
 
 def main():
     """Run the tests"""

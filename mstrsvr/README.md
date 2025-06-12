@@ -1,14 +1,14 @@
 # MSTRSvr Plugin for Instana
 
-A custom Instana plugin for monitoring MicroStrategy Intelligence Server (MSTRSvr) processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
+A custom Instana plugin for monitoring Strategy₿ Intelligence Server (MSTRSvr) processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
 
 ## Overview
 
-The MSTRSvr plugin monitors the MicroStrategy Intelligence Server component, providing real-time visibility into its resource usage and performance characteristics.
+The MSTRSvr plugin monitors the Strategy₿ Intelligence Server component, providing real-time visibility into its resource usage and performance characteristics.
 
 ## Features
 
-- Real-time monitoring of MicroStrategy Intelligence Server processes
+- Real-time monitoring of Strategy₿ Intelligence Server processes
 - Case-insensitive process detection for flexibility
 - Detailed resource usage metrics collection
 - OpenTelemetry integration for seamless Instana reporting
@@ -35,7 +35,7 @@ The MSTRSvr plugin monitors the MicroStrategy Intelligence Server component, pro
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
 
-- MicroStrategy environment with Intelligence Server processes
+- Strategy₿ environment with Intelligence Server processes
 
 ## Installation
 
@@ -239,7 +239,7 @@ The optimal frequency depends on your monitoring needs and the performance impac
 
 ### Considerations for Intelligence Server
 
-For MicroStrategy Intelligence Server, consider these factors when setting the collection frequency:
+For Strategy₿ Intelligence Server, consider these factors when setting the collection frequency:
 
 - **High-load production servers**: Use 60-120 seconds to minimize overhead
 - **During peak usage periods**: Consider reducing frequency to 120-300 seconds
@@ -265,7 +265,7 @@ If metrics aren't appearing in Instana:
 
 1. **Process Not Found**:
    - If you see "No processes found matching 'MSTRSvr'" in the logs, verify that:
-     - The MicroStrategy Intelligence Server process is running
+     - The Strategy₿ Intelligence Server process is running
      - The process name matches (case-insensitive matching is used)
      - You have permissions to view process information
 
@@ -303,13 +303,13 @@ If metrics aren't appearing in Instana:
 
 ### Edge Cases and Limitations
 
-1. **High-Load MicroStrategy Environments**:
+1. **High-Load Strategy₿ Environments**:
    - In high-load environments, the Intelligence Server may spawn many processes
    - Consider increasing the collection interval to reduce monitoring overhead
    - For servers with >50% CPU utilization, use 120-300 second intervals
 
 2. **Clustered Environments**:
-   - In clustered MicroStrategy environments, install the plugin on each node
+   - In clustered Strategy₿ environments, install the plugin on each node
    - Each node will report metrics independently to Instana
    - Metrics are not automatically aggregated across cluster nodes
 
@@ -320,7 +320,7 @@ If metrics aren't appearing in Instana:
      - Adjust collection frequency based on server load patterns
 
 4. **Process Name Variations**:
-   - Some MicroStrategy installations may use different process names
+   - Some Strategy₿ installations may use different process names
    - The plugin uses case-insensitive matching for "MSTRSvr"
    - If your process name differs significantly, modify the sensor.py file
 

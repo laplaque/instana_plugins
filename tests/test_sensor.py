@@ -36,8 +36,8 @@ class TestSensors(unittest.TestCase):
         
         # Verify constants are set correctly
         self.assertEqual(m8prcsvr.sensor.PROCESS_NAME, "M8PrcSvr")
-        self.assertEqual(m8prcsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8prcsvr")
-        self.assertEqual(m8prcsvr.sensor.VERSION, "0.0.10")
+        self.assertEqual(m8prcsvr.sensor.PLUGIN_NAME, "m8prcsvr")
+        self.assertEqual(m8prcsvr.sensor.VERSION, "0.0.18")
 
     def test_m8mulprc_sensor(self):
         """Test M8MulPrc sensor."""
@@ -46,18 +46,18 @@ class TestSensors(unittest.TestCase):
         
         # Verify constants are set correctly
         self.assertEqual(m8mulprc.sensor.PROCESS_NAME, "M8MulPrc")
-        self.assertEqual(m8mulprc.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8mulprc")
-        self.assertEqual(m8mulprc.sensor.VERSION, "0.0.8")
+        self.assertEqual(m8mulprc.sensor.PLUGIN_NAME, "m8mulprc")
+        self.assertEqual(m8mulprc.sensor.VERSION, "0.0.18")
 
     def test_mstrsvr_sensor(self):
-        """Test MSTRSvr sensor."""
+        """Test MstrSvr sensor."""
         # Import the sensor module
         import mstrsvr.sensor
         
         # Verify constants are set correctly
-        self.assertEqual(mstrsvr.sensor.PROCESS_NAME, "MSTRSvr")
-        self.assertEqual(mstrsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_mstrsvr")
-        self.assertEqual(mstrsvr.sensor.VERSION, "0.0.8")
+        self.assertEqual(mstrsvr.sensor.PROCESS_NAME, "MstrSvr")
+        self.assertEqual(mstrsvr.sensor.PLUGIN_NAME, "mstrsvr")
+        self.assertEqual(mstrsvr.sensor.VERSION, "0.0.18")
         
     def test_m8refsvr_sensor(self):
         """Test M8RefSvr sensor."""
@@ -66,8 +66,8 @@ class TestSensors(unittest.TestCase):
         
         # Verify constants are set correctly
         self.assertEqual(m8refsvr.sensor.PROCESS_NAME, "M8RefSvr")
-        self.assertEqual(m8refsvr.sensor.PLUGIN_NAME, "com.instana.plugin.python.microstrategy_m8refsvr")
-        self.assertEqual(m8refsvr.sensor.VERSION, "0.0.9")
+        self.assertEqual(m8refsvr.sensor.PLUGIN_NAME, "m8refsvr")
+        self.assertEqual(m8refsvr.sensor.VERSION, "0.0.18")
 
 if __name__ == '__main__':
     unittest.main()

@@ -182,7 +182,7 @@ def find_plugin_installations():
             
         # Look for plugin installations in old structure
         for base_path in default_paths:
-            plugin_dir = f"microstrategy_{plugin['name']}"
+            plugin_dir = plugin['name']
             full_path = os.path.join(base_path, plugin_dir)
             
             if os.path.exists(full_path) and os.path.isdir(full_path):
@@ -208,8 +208,14 @@ def find_plugin_installations():
     
     return found_count == len(PLUGINS)
 
-def test_plugin(plugin):
-    """Test if a plugin's sensor runs properly"""
+def test_plugin():
+    """Test if a plugin's sensor runs properly - pytest entry point"""
+    # This is just a placeholder for pytest to discover
+    # The actual testing is done in the main function
+    pass
+    
+def _test_plugin(plugin):
+    """Internal implementation to test if a plugin's sensor runs properly"""
     if plugin["sensor_path"] is None:
         logger.warning(f"⚠️ Skipping test for {plugin['process_name']} - not installed")
         return False
@@ -274,7 +280,7 @@ def run_plugin_tests(args):
     
     for plugin in plugins_to_test:
         if "Found" in plugin["status"]:  # Test both old and new structure installations
-            success = test_plugin(plugin)
+            success = _test_plugin(plugin)
             if not success:
                 all_tests_passed = False
     

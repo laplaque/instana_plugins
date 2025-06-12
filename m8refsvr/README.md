@@ -1,14 +1,14 @@
 # M8RefSvr Plugin for Instana
 
-A custom Instana plugin for monitoring MicroStrategy M8RefSvr processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
+A custom Instana plugin for monitoring Strategy₿ M8RefSvr processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
 
 ## Overview
 
-The M8RefSvr plugin monitors the MicroStrategy Reference Server component, providing real-time visibility into its resource usage and performance characteristics.
+The M8RefSvr plugin monitors the Strategy₿ Reference Server component, providing real-time visibility into its resource usage and performance characteristics.
 
 ## Features
 
-- Real-time monitoring of MicroStrategy M8RefSvr processes
+- Real-time monitoring of Strategy₿ M8RefSvr processes
 - Case-insensitive process detection for flexibility
 - Detailed resource usage metrics collection
 - OpenTelemetry integration for seamless Instana reporting
@@ -35,7 +35,7 @@ The M8RefSvr plugin monitors the MicroStrategy Reference Server component, provi
   pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
   ```
 
-- MicroStrategy environment with M8RefSvr processes
+- Strategy₿ environment with M8RefSvr processes
 
 ## Installation
 
@@ -268,7 +268,7 @@ If metrics aren't appearing in Instana:
 
 1. **Process Not Found**:
    - If you see "No processes found matching 'M8RefSvr'" in the logs, verify that:
-     - The MicroStrategy M8RefSvr process is running
+     - The Strategy₿ M8RefSvr process is running
      - The process name matches (case-insensitive matching is used)
      - You have permissions to view process information
 
