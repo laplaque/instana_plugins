@@ -39,6 +39,11 @@ Thumbs.db
 diagram.png
 *.bak
 
+# Conda environment files
+environment.yml
+.conda/
+conda-meta/
+
 # Logs directory - keep the directory but ignore log files
 logs/*.log
 logs/*.log.*
