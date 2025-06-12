@@ -1,6 +1,6 @@
 # Generic OpenTelemetry Process Monitoring Framework for Instana
 
-A extensible framework for creating custom Instana plugins that monitor any processes using OpenTelemetry. This repository provides a robust, reusable foundation for process monitoring with Strategy₿ implementations as reference examples.
+An extensible framework for creating custom Instana plugins that monitor any processes using OpenTelemetry. This repository provides a robust, reusable foundation for process monitoring with Strategy₿ implementations as reference examples.
 
 ## Framework Features
 

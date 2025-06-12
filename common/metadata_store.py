@@ -202,7 +202,7 @@ class MetadataStore:
             
             # Create services table
             cursor.execute("""
-            CREATE TABLE services (
+            CREATE TABLE IF NOT EXISTS services (
                 id TEXT PRIMARY KEY,
                 full_name TEXT UNIQUE,
                 display_name TEXT,
