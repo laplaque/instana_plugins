@@ -20,7 +20,7 @@ The following plugins demonstrate the framework's capabilities:
 - [M8MulPrc Plugin](m8mulprc/README.md) - Monitor Strategy₿ M8MulPrc processes
 - [M8PrcSvr Plugin](m8prcsvr/README.md) - Monitor Strategy₿ M8PrcSvr processes
 - [M8RefSvr Plugin](m8refsvr/README.md) - Monitor Strategy₿ M8RefSvr processes
-- [MSTRSvr Plugin](mstrsvr/README.md) - Monitor Strategy₿ Intelligence Server processes
+- [MstrSvr Plugin](mstrsvr/README.md) - Monitor Strategy₿ Intelligence Server processes
 
 ## Core Capabilities
 
@@ -49,14 +49,14 @@ graph TD
         M8["M8MulPrc Process"] 
         M8P["M8PrcSvr Process"]
         M8R["M8RefSvr Process"]
-        MS["MSTRSvr Process"]
+        MS["MstrSvr Process"]
     end
     
     subgraph "Instana Plugins"
         M8S["M8MulPrc Sensor"]
         M8PS["M8PrcSvr Sensor"]
         M8RS["M8RefSvr Sensor"]
-        MSS["MSTRSvr Sensor"]
+        MSS["MstrSvr Sensor"]
         
         subgraph "Common Components"
             PM["Process Monitor"]
@@ -543,7 +543,7 @@ python -m unittest discover tests
 
 1. **Process Detection Limitations**:
    - The plugin relies on the `ps` command and regex matching to find processes
-   - Process names that are very similar may both be detected (e.g., "MSTRSvr" and "MSTRSvrMonitor")
+   - Process names that are very similar may both be detected (e.g., "MstrSvr" and "MstrSvrMonitor")
    - Very short-lived processes might be missed between collection intervals
 
 2. **Resource Usage**:

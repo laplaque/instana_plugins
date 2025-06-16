@@ -59,9 +59,9 @@ echo -e "${YELLOW}3. Installing M8RefSvr plugin...${NC}"
 echo -e "${GREEN}M8RefSvr plugin installed.${NC}"
 echo
 
-echo -e "${YELLOW}4. Installing MSTRSvr plugin...${NC}"
+echo -e "${YELLOW}4. Installing MstrSvr plugin...${NC}"
 ./mstrsvr/install-instana-mstrsvr-plugin.sh -d "${BASE_DIR}"
-echo -e "${GREEN}MSTRSvr plugin installed.${NC}"
+echo -e "${GREEN}MstrSvr plugin installed.${NC}"
 echo
 
 # List the resulting directory structure

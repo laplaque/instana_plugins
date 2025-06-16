@@ -46,7 +46,7 @@ PLUGINS = [
     },
     {
         "name": "mstrsvr",
-        "process_name": "MSTRSvr",
+        "process_name": "MstrSvr",
         "sensor_path": None,
         "plugin_path": None,
         "status": "Not tested"
