@@ -1,10 +1,10 @@
-# MSTRSvr Plugin for Instana
+# MstrSvr Plugin for Instana
 
-A custom Instana plugin for monitoring Strategy₿ Intelligence Server (MSTRSvr) processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
+A custom Instana plugin for monitoring Strategy₿ Intelligence Server (MstrSvr) processes. This plugin collects process-specific metrics and sends them to Instana using OpenTelemetry.
 
 ## Overview
 
-The MSTRSvr plugin monitors the Strategy₿ Intelligence Server component, providing real-time visibility into its resource usage and performance characteristics.
+The MstrSvr plugin monitors the Strategy₿ Intelligence Server component, providing real-time visibility into its resource usage and performance characteristics.
 
 ## Features
 
@@ -97,8 +97,8 @@ If you need to install without sudo access:
 
 The plugin needs access to process information. If running without root:
 
-1. Ensure your user has permission to read `/proc` entries for the MSTRSvr processes
-2. If the MSTRSvr processes run as a different user, you may need to:
+1. Ensure your user has permission to read `/proc` entries for the MstrSvr processes
+2. If the MstrSvr processes run as a different user, you may need to:
    - Run the Instana agent as the same user
    - Use Linux capabilities to grant specific permissions:
 
@@ -168,7 +168,7 @@ Note: When TLS is enabled, the plugin automatically uses `https://` protocol for
 
 ## Testing
 
-To verify the plugin is correctly detecting MSTRSvr processes:
+To verify the plugin is correctly detecting MstrSvr processes:
 
 ```bash
 /opt/instana/agent/plugins/custom_sensors/microstrategy_mstrsvr/sensor.py
@@ -180,7 +180,7 @@ This will output JSON with the collected metrics if processes are found.
 
 The plugin uses:
 
-- `common/process_monitor.py` to collect metrics about MSTRSvr processes
+- `common/process_monitor.py` to collect metrics about MstrSvr processes
 - `common/otel_connector.py` to send these metrics to Instana using OpenTelemetry
 
 The sensor runs continuously, collecting metrics at configurable intervals and sending them to the Instana agent.
@@ -250,7 +250,7 @@ For Strategy₿ Intelligence Server, consider these factors when setting the col
 
 If metrics aren't appearing in Instana:
 
-1. Verify the MSTRSvr process is running: `ps aux | grep -i mstrsvr`
+1. Verify the MstrSvr process is running: `ps aux | grep -i mstrsvr`
 2. Check if the sensor is running: `ps aux | grep microstrategy_mstrsvr`
 3. Examine the Instana agent logs for errors
 4. Run the sensor manually with debug logging:
@@ -264,7 +264,7 @@ If metrics aren't appearing in Instana:
 ### Common Issues
 
 1. **Process Not Found**:
-   - If you see "No processes found matching 'MSTRSvr'" in the logs, verify that:
+   - If you see "No processes found matching 'MstrSvr'" in the logs, verify that:
      - The Strategy₿ Intelligence Server process is running
      - The process name matches (case-insensitive matching is used)
      - You have permissions to view process information
@@ -321,7 +321,7 @@ If metrics aren't appearing in Instana:
 
 4. **Process Name Variations**:
    - Some Strategy₿ installations may use different process names
-   - The plugin uses case-insensitive matching for "MSTRSvr"
+   - The plugin uses case-insensitive matching for "MstrSvr"
    - If your process name differs significantly, modify the sensor.py file
 
 ## Release Notes

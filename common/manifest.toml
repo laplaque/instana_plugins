@@ -1,0 +1,77 @@
+[metadata]
+version = "0.0.20"
+metadata_schema_version = "1.0"
+generated_at = "2025-06-12T14:45:54.007202Z"
+framework_name = "OpenTelemetry Process Monitor"
+python_version_min = "3.6"
+maintainer = "laplaque/instana_plugins Contributors"
+
+[dependencies]
+python_packages = [
+    "opentelemetry-api>=1.15.0",
+    "opentelemetry-sdk>=1.15.0",
+    "opentelemetry-exporter-otlp>=1.15.0"
+]
+
+[installation]
+creates_systemd_service = true
+requires_python_path = true
+base_directory_default = "/opt/instana_plugins"
+supports_user_install = true
+backup_modified_files = true
+
+[common_files]
+
+[common_files."__init__.py"]
+sha256 = "a9ce1f9fa6ca566700c23d28f34b450ab787d3207a1f5ffad2c41c672b4b2ee0"
+size = 267
+description = "Common package initialization and version information"
+required = true
+
+[common_files."version.py"]
+sha256 = "c0a50dbb26d5b5a0eaca694a1ea46934eb3c2015f38587d087769e9971549702"
+size = 4120
+description = "Centralized version and metadata management from manifest.toml"
+required = true
+
+[common_files."base_sensor.py"]
+sha256 = "0303a24bc3bad18da96f766114a1a922ed559b2c89731e0656f4b6cb3d8beb61"
+size = 12735
+description = "Base sensor framework with daemon management and CLI interface"
+required = true
+
+[common_files."process_monitor.py"]
+sha256 = "4f45917d81e663ff40319ad6ad7858bfd99c2cea5d2495e897cda2a59e587d22"
+size = 16351
+description = "Process monitoring and system metrics collection utilities"
+required = true
+
+[common_files."otel_connector.py"]
+sha256 = "37acd69db20eba87abe19ea4f11c1db84cf3f393a82bb076f7dee37772dd3657"
+size = 31087
+description = "OpenTelemetry connector for metrics export to Instana"
+required = true
+
+[common_files."metadata_store.py"]
+sha256 = "75c70c34154424df58ab7177ec1be645b8777ad982a7c4ac8f80a92d1054d3d6"
+size = 32271
+description = "Metadata storage and database schema management"
+required = true
+
+[common_files."logging_config.py"]
+sha256 = "05a2bd1036f7e7779f8002dde7d40efe59d5bdf87c6395d5126760bc38b44c0c"
+size = 3660
+description = "Centralized logging configuration and setup utilities"
+required = true
+
+[common_files."check_dependencies.py"]
+sha256 = "1347c29349c31f2c41b6cff0092d62b4733df2d6933a62675171ee72d50265e2"
+size = 3126
+description = "Python dependency verification and validation utility"
+required = true
+
+[common_files."extract_version.sh"]
+sha256 = "7d2fd55d16c15b7728292bc645a8f1001f1b37ee57975e6301cdc1c542ffd679"
+size = 1075
+description = "Shell script for version extraction from Python modules"
+required = true

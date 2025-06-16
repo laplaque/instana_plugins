@@ -8,7 +8,12 @@ import sys
 import os
 import importlib.util
 import argparse
-import coverage
+
+try:
+    import coverage
+    HAS_COVERAGE = True
+except ImportError:
+    HAS_COVERAGE = False
 
 # Add the parent directory to the path to import the modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -53,13 +58,18 @@ if __name__ == '__main__':
     # Set up mocks if needed
     has_otel = setup_mocks()
     
-    # Initialize coverage if requested
+    # Initialize coverage if requested and available
+    cov = None
     if args.coverage:
-        cov = coverage.Coverage(
-            source=['common'],
-            omit=['*/__pycache__/*', '*/tests/*', '*/mocks/*']
-        )
-        cov.start()
+        if not HAS_COVERAGE:
+            print("Warning: coverage package not installed. Install with: pip install coverage")
+            print("Continuing without coverage reporting...")
+        else:
+            cov = coverage.Coverage(
+                source=['common'],
+                omit=['*/__pycache__/*', '*/tests/*', '*/mocks/*']
+            )
+            cov.start()
     
     # Discover and run all tests
     test_loader = unittest.TestLoader()
@@ -79,8 +89,8 @@ if __name__ == '__main__':
     
     result = test_runner.run(test_suite)
     
-    # Generate coverage report if requested
-    if args.coverage:
+    # Generate coverage report if requested and available
+    if args.coverage and cov is not None:
         cov.stop()
         cov.save()
         print("\nCoverage Report:")

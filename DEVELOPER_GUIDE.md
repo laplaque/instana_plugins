@@ -4,7 +4,9 @@ This guide provides comprehensive instructions for creating custom process monit
 
 ## Table of Contents
 
+- [Development Environment Setup](#development-environment-setup)
 - [Quick Start](#quick-start)
+- [Maintaining Shared Files and Checksums](#maintaining-shared-files-and-checksums)
 - [Framework Overview](#framework-overview)
 - [Creating a New Plugin](#creating-a-new-plugin)
 - [Plugin Configuration](#plugin-configuration)
@@ -15,16 +17,169 @@ This guide provides comprehensive instructions for creating custom process monit
 - [Complete Example](#complete-example)
 - [Troubleshooting](#troubleshooting)
 
+## Development Environment Setup
+
+### Prerequisites
+- **Python 3.8 or later** (Python 3.12 recommended)
+- **Conda or Miniconda** for virtual environment management
+- **Git** for version control
+- **Access to an Instana backend** or demo environment
+- **Basic understanding** of process monitoring concepts
+
+### Option 1: Conda Environment (Recommended)
+
+Create a dedicated conda environment for this project:
+
+```bash
+# Create the environment
+conda create -n instana-plugins python=3.12 -y
+
+# Activate the environment
+conda activate instana-plugins
+
+# Install development dependencies
+pip install -r tests/requirements.txt
+
+# Optional: Install additional development tools
+pip install ipython black flake8
+```
+
+### Option 2: Using environment.yml (Alternative)
+
+For a reproducible environment with all development tools:
+
+```bash
+# Create environment from the provided configuration
+conda env create -f environment.yml
+
+# Activate the environment
+conda activate instana-plugins
+```
+
+### Verifying Installation
+
+Test that everything works correctly:
+
+```bash
+# Verify Python version
+python --version  # Should show Python 3.12.x
+
+# Test the framework
+python tests/run_tests.py
+
+# Test a specific plugin
+python m8mulprc/sensor.py --run-once --log-level=DEBUG
+```
+
+### Development Tools Included
+
+The environment includes:
+- **pytest**: Advanced testing framework with fixtures and plugins
+- **pytest-cov**: Test coverage reporting
+- **coverage**: Code coverage analysis and HTML reports
+- **mock**: Mocking library for unit tests
+- **ipython**: Enhanced interactive Python shell
+- **black**: Code formatter (optional)
+- **flake8**: Code linting (optional)
+
+### Environment Management
+
+```bash
+# Activate environment when starting work
+conda activate instana-plugins
+
+# Deactivate when done
+conda deactivate
+
+# List environments
+conda env list
+
+# Remove environment if needed
+conda env remove -n instana-plugins
+```
+
+### IDE Configuration
+
+If using VS Code, ensure your Python interpreter points to the conda environment:
+- Open Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+- Select "Python: Select Interpreter"
+- Choose the interpreter from your `instana-plugins` environment
+
 ## Quick Start
 
 To create a new plugin for monitoring a process called "MyApp":
 
 1. **Create plugin directory**: `mkdir myapp`
-2. **Create configuration**: `myapp/__init__.py`
+2. **Create configuration**: Choose between:
+   - **Modern TOML approach**: `myapp/plugin.toml` (recommended)
+   - **Legacy Python approach**: `myapp/__init__.py` (still supported)
 3. **Create sensor**: `myapp/sensor.py`
 4. **Create tests**: `tests/test_myapp_sensor.py`
 5. **Create installer**: `myapp/install-instana-myapp-plugin.sh`
 6. **Test your plugin**: `python myapp/sensor.py --run-once`
+
+> **Note**: This guide covers both the new TOML-based configuration system (v0.0.20+) and the legacy Python configuration approach for backward compatibility.
+
+## Maintaining Shared Files and Checksums
+
+When you modify shared files in the `common/` directory, you must regenerate the manifest to update SHA256 checksums:
+
+### **Regenerating common/manifest.toml**
+
+After making changes to any files in the `common/` directory:
+
+```bash
+# Navigate to the common directory
+cd common/
+
+# Run the manifest generator
+python3 generate_manifest.py
+
+# Verify the updated checksums
+cat manifest.toml
+```
+
+### **When to Regenerate Manifest**
+
+You **must** regenerate the manifest.toml when:
+- ✅ Adding new files to `common/`
+- ✅ Modifying existing files in `common/`
+- ✅ Updating version numbers
+- ✅ Changing framework metadata
+- ✅ Before creating releases or tags
+
+### **Automated Verification**
+
+The installation system automatically verifies file integrity using SHA256 checksums:
+
+```bash
+# Test checksum verification
+cd m8mulprc/
+sudo ./install-instana-m8mulprc-plugin.sh
+
+# Look for checksum verification messages:
+# "✅ File checksum verified: metadata_store.py"
+# "❌ Checksum mismatch detected for: [filename]"
+```
+
+### **Development Workflow**
+
+1. **Make Changes**: Modify files in `common/`
+2. **Test Changes**: Run your plugin to ensure functionality
+3. **Regenerate Manifest**: `cd common && python3 generate_manifest.py`
+4. **Test Installation**: Verify installation with new checksums
+5. **Commit All Changes**: Include both code changes and updated manifest.toml
+
+### **Troubleshooting Manifest Issues**
+
+**Problem**: "Checksum mismatch detected"
+**Solution**: Regenerate manifest.toml after any file changes
+
+**Problem**: "Manifest file not found"  
+**Solution**: Run `python3 generate_manifest.py` in the `common/` directory
+
+**Problem**: "Invalid manifest format"
+**Solution**: Check manifest.toml syntax, regenerate if corrupted
 
 ## Framework Overview
 
@@ -104,9 +259,40 @@ mkdir myapp
 cd myapp
 ```
 
-### Step 2: Configuration File (`__init__.py`)
+### Step 2: Configuration File
 
-This file defines the core configuration for your plugin:
+You can choose between two configuration approaches:
+
+#### Option A: Modern TOML Configuration (Recommended - v0.0.20+)
+
+Create `myapp/plugin.toml`:
+
+```toml
+[plugin]
+name = "myapp"
+description = "MyApp process monitoring for Instana"
+version = "1.0.0"
+
+[service]
+namespace = "MyCompany"
+process_name = "MyApp"
+
+[monitoring]
+interval = 60
+enabled = true
+
+[dependencies]
+python_version = ">=3.6"
+packages = ["opentelemetry-api", "opentelemetry-sdk", "opentelemetry-exporter-otlp"]
+
+[systemd]
+service_name = "instana-myapp-monitor"
+description = "MyApp monitoring service for Instana"
+```
+
+#### Option B: Legacy Python Configuration (Still Supported)
+
+Create `myapp/__init__.py`:
 
 ```python
 """
@@ -125,9 +311,84 @@ PLUGIN_NAME = "myapp"
 
 #### Configuration Options Explained
 
+**TOML Configuration (plugin.toml):**
+- **plugin.name**: Unique identifier for your plugin (should match directory name)
+- **plugin.description**: Human-readable description of what the plugin monitors
+- **plugin.version**: Plugin version for tracking and compatibility
+- **service.namespace**: Groups your services in Instana (company/product name)
+- **service.process_name**: The process name to search for (case-insensitive regex matching)
+- **monitoring.interval**: Default collection interval in seconds
+- **monitoring.enabled**: Whether monitoring is enabled by default
+- **dependencies.python_version**: Minimum Python version requirement
+- **dependencies.packages**: Required Python packages for the plugin
+- **systemd.service_name**: Name for the systemd service
+- **systemd.description**: Description for the systemd service
+
+**Python Configuration (__init__.py):**
 - **SERVICE_NAMESPACE**: Groups your services in Instana. Use your company/product name.
 - **PROCESS_NAME**: The process name to search for. The framework uses case-insensitive regex matching.
 - **PLUGIN_NAME**: Unique identifier for your plugin. Should match your directory name.
+
+#### Benefits of TOML Configuration
+
+- **Rich Metadata**: Store comprehensive plugin information including dependencies and descriptions
+- **Version Management**: Built-in version tracking and compatibility checking
+- **Installation Integration**: Automatic integration with shared installation functions
+- **Checksum Verification**: Automatic integrity checking during installation
+- **Standardization**: Industry-standard configuration format
+- **Future-Proof**: Extensible for additional configuration options
+- **Metadata Sanitization**: Automatic service name sanitization for vendor-agnostic compatibility
+
+### Metadata Sanitization System
+
+The framework includes intelligent metadata sanitization that ensures your plugins work with any monitoring system:
+
+#### How It Works
+
+1. **Service Name Input**: Your plugin provides service names with any characters (Unicode, emojis, special symbols)
+2. **Automatic Sanitization**: The framework converts service names to safe technical identifiers using only `[a-z0-9_]`
+3. **Dual-Format Storage**: Both sanitized (for performance) and original (for display) names are maintained
+4. **Dynamic Metrics Prefixes**: Metrics prefixes are automatically derived from sanitized service names
+
+#### Example Transformations
+
+```python
+# Input service names (from your TOML or code)
+"Strategy₿.M8MulPrc"           → "strategy_m8mulprc" (stored) + "Strategy M8mulprc" (display)
+"MyCompany@WebServer.v2"       → "mycompany_webserver_v2" (stored) + "Mycompany Webserver V2" (display)
+"Service-Name With Spaces!"    → "service_name_with_spaces" (stored) + "Service Name With Spaces" (display)
+"123numeric-start"             → "metric_123numeric_start" (stored) + "Metric 123numeric Start" (display)
+```
+
+#### Benefits for Plugin Developers
+
+- **Unicode Freedom**: Use any characters in service names, including company symbols and emojis
+- **Vendor Agnostic**: Your plugins work with any monitoring system that requires safe identifiers
+- **Performance Optimized**: Database queries use sanitized identifiers for optimal speed
+- **Professional Display**: Human-readable names are preserved for monitoring dashboards
+- **No Configuration Needed**: Sanitization is completely automatic
+
+#### Configuration Impact
+
+With metadata sanitization, you no longer need to specify hardcoded metrics prefixes in your plugin.toml:
+
+```toml
+# OLD APPROACH (no longer needed):
+[otel_config]
+service_name_template = "{service_namespace}.{process_name}"
+metrics_prefix = "mycompany.myapp"  # ❌ Hardcoded, removed in v0.0.20+
+
+# NEW APPROACH (automatic):
+[otel_config]
+service_name_template = "{service_namespace}.{process_name}"
+# ✅ Metrics prefix automatically derived from service name using sanitization
+```
+
+The framework automatically:
+1. Takes your service name template: `"MyCompany.WebServer"`
+2. Sanitizes it for technical use: `"mycompany_webserver"`
+3. Uses sanitized version for metrics prefix and database storage
+4. Maintains original for display purposes: `"Mycompany Webserver"`
 
 ### Step 3: Sensor Entry Point (`sensor.py`)
 

@@ -4,9 +4,12 @@ An extensible framework for creating custom Instana plugins that monitor any pro
 
 ## Framework Features
 
+- **TOML-Based Configuration**: Modern configuration system with plugin.toml files
 - **Generic Process Monitoring**: Monitor any processes by name or pattern matching
 - **OpenTelemetry Integration**: Modern OTLP protocol for seamless Instana integration
 - **Extensible Architecture**: Clean, modular design for easy customization
+- **Automated Installation**: Shared installation functions with checksum verification
+- **Centralized Version Management**: Single source of truth for version information
 - **Production Ready**: TLS encryption, proper error handling, comprehensive logging
 - **Developer Friendly**: Simple plugin creation with comprehensive documentation
 
@@ -17,7 +20,7 @@ The following plugins demonstrate the framework's capabilities:
 - [M8MulPrc Plugin](m8mulprc/README.md) - Monitor Strategy₿ M8MulPrc processes
 - [M8PrcSvr Plugin](m8prcsvr/README.md) - Monitor Strategy₿ M8PrcSvr processes
 - [M8RefSvr Plugin](m8refsvr/README.md) - Monitor Strategy₿ M8RefSvr processes
-- [MSTRSvr Plugin](mstrsvr/README.md) - Monitor Strategy₿ Intelligence Server processes
+- [MstrSvr Plugin](mstrsvr/README.md) - Monitor Strategy₿ Intelligence Server processes
 
 ## Core Capabilities
 
@@ -46,14 +49,14 @@ graph TD
         M8["M8MulPrc Process"] 
         M8P["M8PrcSvr Process"]
         M8R["M8RefSvr Process"]
-        MS["MSTRSvr Process"]
+        MS["MstrSvr Process"]
     end
     
     subgraph "Instana Plugins"
         M8S["M8MulPrc Sensor"]
         M8PS["M8PrcSvr Sensor"]
         M8RS["M8RefSvr Sensor"]
-        MSS["MSTRSvr Sensor"]
+        MSS["MstrSvr Sensor"]
         
         subgraph "Common Components"
             PM["Process Monitor"]
@@ -253,6 +256,24 @@ The framework includes an automated metadata schema versioning system that ensur
 - **Future-Proofed**: Extensible design supports incremental schema versions
 
 The metadata database is automatically managed and requires no manual intervention.
+
+### Metadata Sanitization
+
+The framework includes intelligent metadata sanitization for vendor-agnostic compatibility:
+
+- **Service Name Sanitization**: Converts any service name to safe technical identifiers using only `[a-z0-9_]`
+- **Unicode Support**: Service names can contain any characters including emojis, Unicode symbols, and special characters
+- **Dual-Format Storage**: Maintains both sanitized technical identifiers for performance and original names for display
+- **Dynamic Metrics Prefixes**: Automatically derives metrics prefixes from service names using sanitization
+- **Database Performance**: All stored identifiers use consistent format for optimal query performance
+- **Professional Standards**: Industry-standard sanitization practices ensure compatibility with any monitoring system
+
+**Example transformations:**
+- `"Strategy₿.M8MulPrc"` → `"strategy_m8mulprc"` (stored) + `"Strategy M8mulprc"` (display)
+- `"Service@Domain.com"` → `"service_domain_com"` (stored) + `"Service Domain Com"` (display)
+- `"123numeric-start"` → `"metric_123numeric_start"` (stored) + `"Metric 123numeric Start"` (display)
+
+This ensures the framework works with any process names while maintaining human-readable displays in monitoring tools.
 
 Each plugin implements a sensor that uses these common components to monitor specific Strategy₿ processes.
 
@@ -522,7 +543,7 @@ python -m unittest discover tests
 
 1. **Process Detection Limitations**:
    - The plugin relies on the `ps` command and regex matching to find processes
-   - Process names that are very similar may both be detected (e.g., "MSTRSvr" and "MSTRSvrMonitor")
+   - Process names that are very similar may both be detected (e.g., "MstrSvr" and "MstrSvrMonitor")
    - Very short-lived processes might be missed between collection intervals
 
 2. **Resource Usage**:
