@@ -1,0 +1,202 @@
+name: PR Validation
+on:
+  pull_request:
+    branches: [main, master]  
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-workflow-changes:
+    name: Check Workflow Changes
+    runs-on: ubuntu-latest
+    outputs:
+      workflow_only: ${{ steps.filter.outputs.workflow_only }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Check for workflow-only changes
+        id: filter
+        run: |
+          # Get the files changed in this PR
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          # Check if all changed files are in .github/workflows or .github/actions
+          WORKFLOW_ONLY=true
+          for file in $CHANGED_FILES; do
+            if [[ ! "$file" =~ ^\.github/(workflows|actions)/ ]]; then
+              WORKFLOW_ONLY=false
+              break
+            fi
+          done
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo "workflow_only=$WORKFLOW_ONLY" >> $GITHUB_OUTPUT
+          
+          if [ "$WORKFLOW_ONLY" = "true" ]; then
+            echo "✅ Only workflow files changed - skipping TAG validation"
+          else
+            echo "📋 Code changes detected - TAG validation required"
+          fi
+
+  validate-pr-ready:
+    name: Validate PR Ready for Master
+    runs-on: ubuntu-latest
+    needs: check-workflow-changes
+    if: ${{ needs.check-workflow-changes.outputs.workflow_only != 'true' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Need full history to check all existing TAG files
+        
+      - name: Check TAG file presence and format
+        id: check-tag
+        run: |
+          TAG_FILES=$(find . -maxdepth 1 -name "TAG_v*.md" | wc -l)
+          if [ $TAG_FILES -eq 0 ]; then
+            echo "❌ PR not ready to merge: Missing TAG_vn.n.nn.md file"
+            echo "ℹ️  A TAG file is required for merging to master branch"
+            exit 1
+          elif [ $TAG_FILES -gt 1 ]; then
+            echo "❌ PR not ready to merge: Multiple TAG files found"
+            echo "ℹ️  Only one TAG file should be present per release"
+            exit 1
+          else
+            TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md")
+            echo "✅ Found $TAG_FILE"
+            
+            # Extract version from filename
+            NEW_VERSION=$(basename "$TAG_FILE" .md | sed 's/TAG_v//')
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "tag_file=$TAG_FILE" >> $GITHUB_OUTPUT
+            
+            # Validate version format (major.minor.patch)
+            if ! [[ $NEW_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "❌ Invalid TAG file format: $TAG_FILE"
+              echo "ℹ️  Expected format: TAG_v{major}.{minor}.{patch}.md (e.g., TAG_v0.1.01.md)"
+              exit 1
+            fi
+            
+            echo "✅ TAG file format valid: $TAG_FILE"
+          fi
+
+      - name: Validate version increment
+        run: |
+          NEW_VERSION="${{ steps.check-tag.outputs.new_version }}"
+          echo "🔍 Checking version increment for: v$NEW_VERSION"
+          
+          # Get all existing TAG files from repository history
+          ALL_TAG_FILES=$(git ls-files | grep "^TAG_v.*\.md$" || echo "")
+          
+          if [ -z "$ALL_TAG_FILES" ]; then
+            echo "✅ No previous TAG files found. This is the first release: v$NEW_VERSION"
+            exit 0
+          fi
+          
+          # Extract versions from all existing TAG files
+          EXISTING_VERSIONS=""
+          for tag_file in $ALL_TAG_FILES; do
+            version=$(basename "$tag_file" .md | sed 's/TAG_v//')
+            # Validate existing version format
+            if [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              EXISTING_VERSIONS="$EXISTING_VERSIONS $version"
+            fi
+          done
+          
+          if [ -z "$EXISTING_VERSIONS" ]; then
+            echo "✅ No valid previous versions found. This is the first release: v$NEW_VERSION"
+            exit 0
+          fi
+          
+          # Find the highest existing version
+          HIGHEST_VERSION=$(echo "$EXISTING_VERSIONS" | tr ' ' '\n' | sort -V | tail -n 1)
+          echo "📊 Highest existing version: v$HIGHEST_VERSION"
+          echo "🆕 New version: v$NEW_VERSION"
+          
+          # Compare versions using sort -V (version sort)
+          if [ "$(printf '%s\n' "$HIGHEST_VERSION" "$NEW_VERSION" | sort -V | head -n1)" = "$NEW_VERSION" ]; then
+            if [ "$HIGHEST_VERSION" = "$NEW_VERSION" ]; then
+              echo "❌ Version conflict: v$NEW_VERSION already exists"
+              echo "ℹ️  Please increment to a higher version"
+              echo "📋 Existing versions: $(echo $EXISTING_VERSIONS | tr ' ' '\n' | sort -V | tr '\n' ' ')"
+              exit 1
+            else
+              echo "❌ Version downgrade: v$NEW_VERSION is lower than v$HIGHEST_VERSION"
+              echo "ℹ️  New version must be higher than the current highest version"
+              echo "📋 Suggested versions:"
+              echo "   - Patch: v$(echo $HIGHEST_VERSION | awk -F. '{print $1"."$2"."($3+1)}')"
+              echo "   - Minor: v$(echo $HIGHEST_VERSION | awk -F. '{print $1"."($2+1)".0"}')"  
+              echo "   - Major: v$(echo $HIGHEST_VERSION | awk -F. '{print ($1+1)".0.0"}')"
+              exit 1
+            fi
+          else
+            echo "✅ Version increment valid: v$HIGHEST_VERSION → v$NEW_VERSION"
+            
+            # Determine increment type
+            IFS='.' read -r old_major old_minor old_patch <<< "$HIGHEST_VERSION"
+            IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
+            
+            if [ $new_major -gt $old_major ]; then
+              echo "🚀 Major version increment detected"
+            elif [ $new_minor -gt $old_minor ]; then
+              echo "✨ Minor version increment detected" 
+            elif [ $new_patch -gt $old_patch ]; then
+              echo "🔧 Patch version increment detected"
+            fi
+          fi
+
+      - name: Validate manifest.toml consistency
+        run: |
+          NEW_VERSION="${{ steps.check-tag.outputs.new_version }}"
+          TAG_FILE="${{ steps.check-tag.outputs.tag_file }}"
+          
+          # Check if manifest.toml version matches TAG file version
+          if [ -f "common/manifest.toml" ]; then
+            MANIFEST_VERSION=$(grep '^version = ' common/manifest.toml | sed 's/version = "\(.*\)"/\1/')
+            
+            if [ "$MANIFEST_VERSION" != "$NEW_VERSION" ]; then
+              echo "❌ Version mismatch between files:"
+              echo "   TAG file: $TAG_FILE (v$NEW_VERSION)"
+              echo "   manifest.toml: v$MANIFEST_VERSION"
+              echo "ℹ️  Please update common/manifest.toml version to match TAG file"
+              exit 1
+            else
+              echo "✅ manifest.toml version matches: v$MANIFEST_VERSION"
+            fi
+          else
+            echo "⚠️  Warning: common/manifest.toml not found"
+          fi
+
+      - name: Validate RELEASE_NOTES.md consistency
+        run: |
+          NEW_VERSION="${{ steps.check-tag.outputs.new_version }}"
+          TAG_FILE="${{ steps.check-tag.outputs.tag_file }}"
+          
+          # Check if RELEASE_NOTES.md contains the new version
+          if [ -f "RELEASE_NOTES.md" ]; then
+            if ! grep -q "Version $NEW_VERSION" "RELEASE_NOTES.md"; then
+              echo "❌ Version not found in RELEASE_NOTES.md:"
+              echo "   TAG file: $TAG_FILE (v$NEW_VERSION)"
+              echo "ℹ️  Please add 'Version $NEW_VERSION' entry to RELEASE_NOTES.md"
+              exit 1
+            else
+              echo "✅ RELEASE_NOTES.md contains: Version $NEW_VERSION"
+            fi
+          else
+            echo "⚠️  Warning: RELEASE_NOTES.md not found"
+          fi
+
+      - name: PR ready summary
+        run: |
+          NEW_VERSION="${{ steps.check-tag.outputs.new_version }}"
+          TAG_FILE="${{ steps.check-tag.outputs.tag_file }}"
+          echo "🎉 PR Validation Passed!"
+          echo "✅ TAG file present: $TAG_FILE"
+          echo "✅ Version format valid: v$NEW_VERSION"
+          echo "✅ Version increment valid"
+          echo "✅ File consistency verified"
+          echo ""
+          echo "🚀 PR is ready to merge to master!"
