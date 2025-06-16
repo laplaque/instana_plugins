@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Unit tests for edge cases and limitations.
+Unit tests for edge cases and limitations with psutil-based implementation.
 """
 import unittest
 from unittest.mock import patch, MagicMock, call
@@ -10,12 +10,13 @@ import os
 import logging
 import tempfile
 import shutil
+import psutil
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import modules to test
-from common.process_monitor import get_process_metrics
+from common.process_monitor import get_process_metrics, get_disk_io_for_pid
 from common.otel_connector import InstanaOTelConnector
 from common.logging_config import setup_logging
 
@@ -44,43 +45,151 @@ class TestEdgeCases(unittest.TestCase):
             logging.root.addHandler(handler)
         logging.root.setLevel(self.root_level)
     
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_empty_process_output(self, mock_check_output):
-        """Test handling of empty process output."""
-        # Mock empty output from ps command
-        mock_check_output.return_value = b""
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_empty_process_output(self, mock_process_iter):
+        """Test handling of empty process list."""
+        # Mock empty process list
+        mock_process_iter.return_value = []
         
         # Call the function
         result = get_process_metrics("TestProcess")
         
-        # Should return None for empty output
+        # Should return None for empty process list
         self.assertIsNone(result)
     
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_malformed_process_output(self, mock_check_output):
-        """Test handling of malformed process output."""
-        # Mock malformed output from ps command
-        mock_check_output.return_value = b"PID CPU MEM COMMAND\ninvalid data"
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_malformed_process_output(self, mock_process_iter):
+        """Test handling of psutil exceptions during process iteration."""
+        # Mock psutil to raise an exception
+        mock_process_iter.side_effect = psutil.Error("psutil error")
         
         # Call the function
         result = get_process_metrics("TestProcess")
         
-        # Should return None for malformed output
+        # Should return None for psutil errors
         self.assertIsNone(result)
     
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_process_with_special_chars(self, mock_check_output):
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_process_with_special_chars(self, mock_process_iter):
         """Test handling of process names with special characters."""
-        # Mock output with special characters in process name - proper PS output format with semicolon delimiter
-        mock_check_output.return_value = b"PID;PPID;%CPU;%MEM;COMMAND\n123;1;10.5;20.3;Test-Process[special]"
+        # Create a mock process with special characters in name
+        mock_proc = MagicMock()
+        mock_proc.pid = 5678
+        mock_proc.ppid.return_value = 1
+        mock_proc.name.return_value = "Test-Process[special]"
+        mock_proc.cpu_percent.return_value = 10.5
+        mock_proc.memory_percent.return_value = 20.3
+        mock_proc.info = {
+            'pid': 5678,
+            'ppid': 1,
+            'name': 'Test-Process[special]',
+            'cpu_percent': 10.5,
+            'memory_percent': 20.3
+        }
         
-        # Call the function with regex special characters
-        result = get_process_metrics("Test-Process\\[special\\]")
+        mock_process_iter.return_value = [mock_proc]
         
-        # Should handle special characters correctly
-        self.assertIsNotNone(result)
-        self.assertEqual(result["process_count"], 1)
-        self.assertEqual(result["cpu_usage"], 10.5)
+        # Mock helper functions to return basic values
+        with patch('common.process_monitor.get_disk_io_for_pid') as mock_disk_io, \
+             patch('common.process_monitor.get_file_descriptor_count') as mock_fd_count, \
+             patch('common.process_monitor.get_thread_count') as mock_thread_count, \
+             patch('common.process_monitor.get_context_switches') as mock_ctx_switches, \
+             patch('common.process_monitor.get_process_cpu_per_core') as mock_cpu_per_core:
+            
+            mock_disk_io.return_value = (0, 0)
+            mock_fd_count.return_value = 0
+            mock_thread_count.return_value = 1
+            mock_ctx_switches.return_value = (0, 0)
+            mock_cpu_per_core.return_value = {}
+            
+            result = get_process_metrics("Test-Process")
+            
+            # Should handle special characters correctly
+            self.assertIsNotNone(result)
+            self.assertEqual(result["process_count"], 1)
+            self.assertEqual(result["cpu_usage"], 10.5)
+            self.assertEqual(result["memory_usage"], 20.3)
+    
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_process_access_denied(self, mock_process_iter):
+        """Test handling of access denied errors for processes."""
+        # Create a mock process that raises AccessDenied
+        mock_proc = MagicMock()
+        mock_proc.pid = 1234
+        mock_proc.ppid.side_effect = psutil.AccessDenied(1234)
+        mock_proc.name.return_value = "TestProcess"
+        mock_proc.info = {
+            'name': 'TestProcess'
+        }
+        
+        mock_process_iter.return_value = [mock_proc]
+        
+        result = get_process_metrics("TestProcess")
+        
+        # Should handle access denied gracefully and return None
+        self.assertIsNone(result)
+    
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_process_no_such_process(self, mock_process_iter):
+        """Test handling of NoSuchProcess errors."""
+        # Create a mock process that raises NoSuchProcess during processing
+        mock_proc = MagicMock()
+        mock_proc.pid = 1234
+        mock_proc.ppid.side_effect = psutil.NoSuchProcess(1234)
+        mock_proc.name.return_value = "TestProcess"
+        mock_proc.info = {
+            'name': 'TestProcess'
+        }
+        
+        mock_process_iter.return_value = [mock_proc]
+        
+        result = get_process_metrics("TestProcess")
+        
+        # Should handle no such process gracefully and return None
+        self.assertIsNone(result)
+    
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_zombie_process_handling(self, mock_process_iter):
+        """Test handling of zombie processes."""
+        # Create a mock process that raises ZombieProcess
+        mock_proc = MagicMock()
+        mock_proc.pid = 1234
+        mock_proc.ppid.side_effect = psutil.ZombieProcess(1234)
+        mock_proc.name.return_value = "TestProcess"
+        mock_proc.info = {
+            'name': 'TestProcess'
+        }
+        
+        mock_process_iter.return_value = [mock_proc]
+        
+        result = get_process_metrics("TestProcess")
+        
+        # Should handle zombie processes gracefully and return None
+        self.assertIsNone(result)
+    
+    def test_get_disk_io_for_pid_permission_error(self):
+        """Test handling of permission errors when accessing disk I/O."""
+        # Create a mock process that raises AccessDenied for io_counters
+        mock_proc = MagicMock()
+        mock_proc.io_counters.side_effect = psutil.AccessDenied(1234)
+        
+        read_bytes, write_bytes = get_disk_io_for_pid(mock_proc)
+        
+        # Should handle the error gracefully and return zeros
+        self.assertEqual(read_bytes, 0)
+        self.assertEqual(write_bytes, 0)
+    
+    def test_get_disk_io_for_pid_no_such_process(self):
+        """Test handling of NoSuchProcess when getting disk I/O."""
+        # Create a mock process that raises NoSuchProcess for io_counters
+        mock_proc = MagicMock()
+        mock_proc.io_counters.side_effect = psutil.NoSuchProcess(1234)
+        
+        read_bytes, write_bytes = get_disk_io_for_pid(mock_proc)
+        
+        # Should handle the error gracefully and return zeros
+        self.assertEqual(read_bytes, 0)
+        self.assertEqual(write_bytes, 0)
     
     @patch('common.otel_connector.OTLPSpanExporter')
     def test_large_metric_batch(self, mock_exporter):
@@ -129,20 +238,6 @@ class TestEdgeCases(unittest.TestCase):
         self.assertTrue(os.path.exists(log_file))
         self.assertTrue(os.path.exists(f"{log_file}.1"))
     
-    @patch('builtins.open')
-    def test_proc_file_permission_error(self, mock_open):
-        """Test handling of permission errors when accessing /proc files."""
-        # Mock permission error when opening /proc file
-        mock_open.side_effect = PermissionError("Permission denied")
-        
-        # Call the function that would access /proc
-        from common.process_monitor import get_disk_io_for_pid
-        read_bytes, write_bytes = get_disk_io_for_pid(1234)
-        
-        # Should handle the error gracefully
-        self.assertEqual(read_bytes, 0)
-        self.assertEqual(write_bytes, 0)
-    
     @patch('common.otel_connector.OTLPSpanExporter')
     @patch('common.otel_connector.logger')
     def test_network_error_handling(self, mock_logger, mock_exporter):
@@ -163,6 +258,55 @@ class TestEdgeCases(unittest.TestCase):
             mock_logger.error.assert_any_call("Error setting up tracing: Failed to connect")
         except ConnectionError:
             self.fail("ConnectionError was not handled")
+
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_mixed_process_states(self, mock_process_iter):
+        """Test handling of processes in mixed states (running, zombie, etc.)."""
+        # Create multiple mock processes with different states
+        running_proc = MagicMock()
+        running_proc.pid = 1234
+        running_proc.ppid.return_value = 1
+        running_proc.name.return_value = "TestProcess"
+        running_proc.cpu_percent.return_value = 10.0
+        running_proc.memory_percent.return_value = 5.0
+        running_proc.info = {
+            'pid': 1234,
+            'ppid': 1,
+            'name': 'TestProcess',
+            'cpu_percent': 10.0,
+            'memory_percent': 5.0
+        }
+        
+        zombie_proc = MagicMock()
+        zombie_proc.pid = 5678
+        zombie_proc.ppid.side_effect = psutil.ZombieProcess(5678)
+        zombie_proc.name.return_value = "TestProcess"
+        zombie_proc.info = {
+            'name': 'TestProcess'
+        }
+        
+        mock_process_iter.return_value = [running_proc, zombie_proc]
+        
+        # Mock helper functions for the running process
+        with patch('common.process_monitor.get_disk_io_for_pid') as mock_disk_io, \
+             patch('common.process_monitor.get_file_descriptor_count') as mock_fd_count, \
+             patch('common.process_monitor.get_thread_count') as mock_thread_count, \
+             patch('common.process_monitor.get_context_switches') as mock_ctx_switches, \
+             patch('common.process_monitor.get_process_cpu_per_core') as mock_cpu_per_core:
+            
+            mock_disk_io.return_value = (100, 200)
+            mock_fd_count.return_value = 5
+            mock_thread_count.return_value = 2
+            mock_ctx_switches.return_value = (10, 5)
+            mock_cpu_per_core.return_value = {}
+            
+            result = get_process_metrics("TestProcess")
+            
+            # Should successfully handle the running process and ignore the zombie
+            self.assertIsNotNone(result)
+            self.assertEqual(result["process_count"], 1)  # Only the running process should be counted
+            self.assertEqual(result["cpu_usage"], 10.0)
+            self.assertEqual(result["memory_usage"], 5.0)
 
 if __name__ == '__main__':
     unittest.main()

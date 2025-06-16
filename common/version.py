@@ -17,8 +17,14 @@ def get_version():
     
     Returns:
         str: Version string
+        
+    Raises:
+        RuntimeError: If version cannot be read from manifest.toml
     """
-    return get_manifest_value('metadata.version', '0.0.20')
+    version = get_manifest_value('metadata.version', None)
+    if version is None:
+        raise RuntimeError("Version not found in manifest.toml - manifest file may be incomplete or corrupted")
+    return version
 
 def get_metadata_schema_version():
     """

@@ -11,12 +11,15 @@ import sys
 import os
 import argparse
 import logging
+import platform
 from common.logging_config import setup_logging
 
 setup_logging()  # Configure logging at the start of the module
 import time
 import signal
 import errno
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +140,9 @@ def parse_args(description):
     parser.add_argument('--agent-port', type=int, default=4317,
                         help='Port of the Instana agent OTLP receiver (default: 4317)')
     parser.add_argument('--interval', type=int, default=60,
-                        help='Metrics collection interval in seconds (default: 60)')
+                        help='Metrics collection interval in seconds (ignored with --once, default: 60)')
     parser.add_argument('--once', action='store_true',
-                        help='Run once and exit (default: continuous monitoring)')
+                        help='Run once and exit (ignores --interval, default: continuous monitoring)')
     parser.add_argument('--stop', action='store_true',
                         help='Stop the running daemon instance')
     parser.add_argument('--restart', action='store_true',
@@ -165,7 +168,7 @@ def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=
         agent_port=agent_port,
         resource_attributes={
             "process.name": process_name,
-            "host.name": os.uname()[1]
+            "host.name": platform.node()
         },
         metadata_db_path=metadata_db_path,
         service_namespace=service_namespace
@@ -173,7 +176,7 @@ def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=
     
     try:
         # Function to collect and report metrics once
-        def collect_and_report():
+        def collect_and_report(once_mode=run_once):
             try:
                 # Create a span for the metric collection
                 with connector.create_span(
@@ -188,9 +191,28 @@ def monitor_process(process_name, plugin_name, agent_host, agent_port, interval=
                         connector.record_metrics(metrics)
                         logger.info(f"Sent metrics for {process_name}")
                         logger.debug(f"Metrics: {metrics}")
+                        
+                        # Add console output for --once mode
+                        if once_mode:
+                            print(f"✓ Successfully collected {len(metrics)} metrics for '{process_name}':")
+                            for key, value in metrics.items():
+                                if isinstance(value, (int, float)):
+                                    print(f"  {key}: {value}")
+                                else:
+                                    print(f"  {key}: {str(value)}")
+                        
                         return True
                     else:
                         logger.warning(f"No metrics found for process {process_name}")
+                        
+                        # Add console output for --once mode
+                        if once_mode:
+                            print(f"✗ No processes found matching '{process_name}'")
+                            print("  This could mean:")
+                            print("  - The process is not currently running")
+                            print("  - The process name doesn't match the pattern")
+                            print("  - Permission issues accessing process information")
+                        
                         return False
             except Exception as e:
                 logger.error(f"Error collecting metrics for {process_name}: {e}")
@@ -232,6 +254,12 @@ def run_sensor(process_name, plugin_name, version, service_namespace="Unknown"):
         install_dir=args.install_location
     )
 
+    # Validate argument combinations
+    if args.once and args.interval != 60:  # 60 is the default
+        warning_msg = "Warning: --interval flag ignored when using --once mode"
+        logger.warning(warning_msg)
+        print(warning_msg)
+
     pid_file_path = get_pid_file_path(plugin_name)
 
     if args.stop:
@@ -242,10 +270,10 @@ def run_sensor(process_name, plugin_name, version, service_namespace="Unknown"):
                 os.kill(pid, signal.SIGTERM)
                 logger.info(f"Sent SIGTERM to PID {pid}. Waiting for process to terminate...")
                 for _ in range(10): # Wait up to 10 seconds
-                    if not os.path.exists(f"/proc/{pid}"): # Check if process is still running (Linux specific)
+                    if not psutil.pid_exists(pid): # Check if process is still running (cross-platform)
                         break
                     time.sleep(1)
-                if os.path.exists(f"/proc/{pid}"):
+                if psutil.pid_exists(pid):
                     logger.warning(f"Process {pid} did not terminate gracefully. Sending SIGKILL.")
                     os.kill(pid, signal.SIGKILL)
                 remove_pid_file(pid_file_path)
@@ -270,10 +298,10 @@ def run_sensor(process_name, plugin_name, version, service_namespace="Unknown"):
                 os.kill(pid, signal.SIGTERM)
                 logger.info(f"Sent SIGTERM to PID {pid}. Waiting for old process to terminate...")
                 for _ in range(10):
-                    if not os.path.exists(f"/proc/{pid}"):
+                    if not psutil.pid_exists(pid):
                         break
                     time.sleep(1)
-                if os.path.exists(f"/proc/{pid}"):
+                if psutil.pid_exists(pid):
                     logger.warning(f"Old process {pid} did not terminate gracefully. Sending SIGKILL.")
                     os.kill(pid, signal.SIGKILL)
                 remove_pid_file(pid_file_path)
@@ -290,15 +318,17 @@ def run_sensor(process_name, plugin_name, version, service_namespace="Unknown"):
 
     logger.info(f"Starting {plugin_name} v{version} with Instana agent at {args.agent_host}:{args.agent_port}")
 
-    try:
-        daemonize(plugin_name)
-        logger.info(f"{plugin_name} daemonized successfully.")
-    except PIDFileError as e:
-        logger.error(f"Failed to daemonize {plugin_name}: {e}")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during daemonization: {e}")
-        sys.exit(1)
+    # Skip daemonization for --once mode to preserve console output
+    if not args.once:
+        try:
+            daemonize(plugin_name)
+            logger.info(f"{plugin_name} daemonized successfully.")
+        except PIDFileError as e:
+            logger.error(f"Failed to daemonize {plugin_name}: {e}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during daemonization: {e}")
+            sys.exit(1)
 
     # Main monitoring loop
     if args.once:

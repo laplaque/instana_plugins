@@ -1,396 +1,259 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Unit tests for the process_monitor module.
+MIT License
+
+Copyright (c) 2025 laplaque/instana_plugins Contributors
+
+Tests for the process_monitor module with psutil-based implementation.
 """
 import unittest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock, mock_open
+import psutil
+
+# Import the module under test
 import sys
 import os
-import subprocess
-
-# Add the parent directory and mocks to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'mocks')))
-
-# Mock the OpenTelemetry imports before importing the module
-sys.modules['opentelemetry'] = MagicMock()
-sys.modules['opentelemetry.trace'] = MagicMock()
-sys.modules['opentelemetry.sdk'] = MagicMock()
-sys.modules['opentelemetry.sdk.trace'] = MagicMock()
-sys.modules['opentelemetry.sdk.trace.export'] = MagicMock()
-sys.modules['opentelemetry.sdk.resources'] = MagicMock()
-sys.modules['opentelemetry.exporter.otlp.proto.grpc.trace_exporter'] = MagicMock()
-sys.modules['opentelemetry.sdk.metrics'] = MagicMock()
-sys.modules['opentelemetry.sdk.metrics.export'] = MagicMock()
-sys.modules['opentelemetry.exporter.otlp.proto.grpc.metric_exporter'] = MagicMock()
-sys.modules['opentelemetry.metrics'] = MagicMock()
-sys.modules['opentelemetry.semantic_conventions'] = MagicMock()
-
-# Now import the module under test
 from common.process_monitor import (
-    get_process_metrics, 
-    get_disk_io_for_pid, 
-    get_file_descriptor_count,
-    get_thread_count,
-    get_context_switches,
-    get_cpu_cores_count,
-    get_process_cpu_per_core,
-    report_metrics
+    get_process_metrics, get_disk_io_for_pid, get_file_descriptor_count,
+    get_thread_count, get_context_switches, get_process_cpu_per_core
 )
 
 class TestProcessMonitor(unittest.TestCase):
-    """Test cases for the process_monitor module."""
 
-    @patch('common.process_monitor.subprocess.check_output')
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        # Create mock process objects with the required attributes
+        self.mock_proc = MagicMock()
+        self.mock_proc.pid = 1234
+        self.mock_proc.ppid.return_value = 1
+        self.mock_proc.name.return_value = "TestProcess"
+        self.mock_proc.cpu_percent.return_value = 25.5
+        self.mock_proc.memory_percent.return_value = 15.2
+
+    @patch('common.process_monitor.psutil.process_iter')
     @patch('common.process_monitor.get_disk_io_for_pid')
     @patch('common.process_monitor.get_file_descriptor_count')
     @patch('common.process_monitor.get_thread_count')
     @patch('common.process_monitor.get_context_switches')
     @patch('common.process_monitor.get_process_cpu_per_core')
-    def test_get_process_metrics(self, mock_get_cpu_per_core, mock_get_ctx, mock_get_threads, 
-                                mock_get_fds, mock_get_disk_io, mock_check_output):
-        """Test getting process metrics with parent processes."""
-        # Mock subprocess output with PID, PPID, CPU, MEM, COMMAND format using semicolon delimiter
-        # 1234 is a parent process (PPID=1)
-        # 5678 is a parent process (PPID=1)
-        # 9012 is a child thread (PPID=1234)
-        mock_check_output.return_value = b"""1234;1;5.0;2.0;TestProcess
-5678;1;3.0;1.5;TestProcess
-9012;1234;2.0;1.0;TestProcess
-"""
-        # Mock other function returns
-        mock_get_disk_io.return_value = (1000, 2000)
-        mock_get_fds.return_value = 50
-        mock_get_threads.return_value = 10
-        mock_get_ctx.return_value = (100, 200)
-        mock_get_cpu_per_core.return_value = {}  # No per-core CPU usage
+    def test_get_process_metrics_success(self, mock_cpu_per_core, mock_ctx_switches,
+                                       mock_thread_count, mock_fd_count, mock_disk_io, 
+                                       mock_process_iter):
+        """Test successful process metrics collection."""
+        # Mock process_iter to return our test process
+        mock_process_iter.return_value = [self.mock_proc]
         
-        # Call function
-        metrics = get_process_metrics("TestProcess")
+        # Mock the process info structure
+        self.mock_proc.info = {
+            'pid': 1234,
+            'ppid': 1,
+            'name': 'TestProcess',
+            'cpu_percent': 25.5,
+            'memory_percent': 15.2
+        }
         
-        # The check_output is now called multiple times - verify it was called with the expected arguments for ps
-        mock_check_output.assert_any_call(
-            ["ps", "-eo", "pid,ppid,pcpu,pmem,comm", "--sort=-pcpu", "-o", "delimiter=;"],
-            stderr=subprocess.PIPE
-        )
+        # Mock the helper functions
+        mock_disk_io.return_value = (1000, 2000)
+        mock_fd_count.return_value = 10
+        mock_thread_count.return_value = 5
+        mock_ctx_switches.return_value = (100, 50)
+        mock_cpu_per_core.return_value = {"cpu_core_0": 12.5, "cpu_core_1": 8.0}
         
-        # Verify metrics - only parent processes should be counted
-        self.assertEqual(metrics["process_count"], 2)  # Only 1234 and 5678 are parent processes
-        self.assertEqual(metrics["cpu_usage"], 8.0)  # 5.0 + 3.0 (only parent processes)
-        self.assertEqual(metrics["memory_usage"], 3.5)  # 2.0 + 1.5 (only parent processes)
-        self.assertEqual(metrics["thread_count"], 20)  # 10 * 2 (thread count from each parent)
-        self.assertEqual(metrics["monitored_pids"], "1234,5678")  # Only parent PIDs
+        # Call the function
+        result = get_process_metrics("TestProcess")
         
-        # Verify the new thread statistics metrics
-        self.assertEqual(metrics["max_threads_per_process"], 10.0)
-        self.assertEqual(metrics["min_threads_per_process"], 10.0)
-        self.assertEqual(metrics["avg_threads_per_process"], 10.0)
+        # Assertions
+        self.assertIsNotNone(result)
+        self.assertEqual(result["cpu_usage"], 25.5)
+        self.assertEqual(result["memory_usage"], 15.2)
+        self.assertEqual(result["process_count"], 1)
+        self.assertEqual(result["disk_read_bytes"], 1000)
+        self.assertEqual(result["disk_write_bytes"], 2000)
+        self.assertEqual(result["open_file_descriptors"], 10)
+        self.assertEqual(result["thread_count"], 5)
+        self.assertEqual(result["voluntary_ctx_switches"], 100)
+        self.assertEqual(result["nonvoluntary_ctx_switches"], 50)
+        self.assertEqual(result["cpu_core_0"], 12.5)
+        self.assertEqual(result["cpu_core_1"], 8.0)
+        
+        # Verify helper functions were called
+        mock_disk_io.assert_called_once_with(self.mock_proc)
+        mock_fd_count.assert_called_once_with(self.mock_proc)
+        mock_thread_count.assert_called_once_with(self.mock_proc)
+        mock_ctx_switches.assert_called_once_with(self.mock_proc)
 
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_get_process_metrics_no_match(self, mock_check_output):
-        """Test getting process metrics with no matching processes."""
-        # Mock subprocess output with no matching processes using semicolon delimiter
-        mock_check_output.return_value = b"""1234;1;5.0;2.0;OtherProcess
-5678;1;3.0;1.5;AnotherProcess
-"""
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_get_process_metrics_no_match(self, mock_process_iter):
+        """Test get_process_metrics when no matching processes are found."""
+        # Mock empty process list
+        mock_process_iter.return_value = []
         
-        # Call function
-        metrics = get_process_metrics("TestProcess")
+        result = get_process_metrics("NonexistentProcess")
         
-        # Verify result is None
-        self.assertIsNone(metrics)
+        self.assertIsNone(result)
 
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_get_process_metrics_subprocess_error(self, mock_check_output):
-        """Test handling of subprocess errors."""
-        # Mock subprocess error
-        mock_check_output.side_effect = subprocess.CalledProcessError(1, "ps")
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_get_process_metrics_psutil_error(self, mock_process_iter):
+        """Test get_process_metrics when psutil raises an exception."""
+        # Mock psutil to raise NoSuchProcess exception
+        mock_process_iter.side_effect = psutil.NoSuchProcess(1234)
         
-        # Call function
-        metrics = get_process_metrics("TestProcess")
+        result = get_process_metrics("TestProcess")
         
-        # Verify result is None
-        self.assertIsNone(metrics)
+        self.assertIsNone(result)
 
-    @patch('builtins.open')
-    def test_get_disk_io_for_pid(self, mock_open):
-        """Test getting disk I/O for a PID."""
-        # Mock file content
-        mock_file = MagicMock()
-        mock_file.__enter__.return_value.readlines.return_value = [
-            "rchar: 1000\n",
-            "wchar: 2000\n",
-            "read_bytes: 3000\n",
-            "write_bytes: 4000\n"
-        ]
-        mock_open.return_value = mock_file
+    def test_get_disk_io_for_pid_success(self):
+        """Test successful disk I/O retrieval for a process."""
+        # Mock I/O counters
+        mock_io = MagicMock()
+        mock_io.read_bytes = 1000
+        mock_io.write_bytes = 2000
+        self.mock_proc.io_counters.return_value = mock_io
         
-        # Call function
-        read_bytes, write_bytes = get_disk_io_for_pid("1234")
+        read_bytes, write_bytes = get_disk_io_for_pid(self.mock_proc)
         
-        # Verify results
-        self.assertEqual(read_bytes, 3000)
-        self.assertEqual(write_bytes, 4000)
-        mock_open.assert_called_once_with("/proc/1234/io", "r")
+        self.assertEqual(read_bytes, 1000)
+        self.assertEqual(write_bytes, 2000)
 
-    @patch('builtins.open')
-    def test_get_disk_io_for_pid_error(self, mock_open):
-        """Test error handling in get_disk_io_for_pid."""
-        # Mock file error
-        mock_open.side_effect = Exception("Test error")
+    def test_get_disk_io_for_pid_no_such_process(self):
+        """Test disk I/O retrieval when process doesn't exist."""
+        self.mock_proc.io_counters.side_effect = psutil.NoSuchProcess(1234)
         
-        # Call function
-        read_bytes, write_bytes = get_disk_io_for_pid("1234")
+        read_bytes, write_bytes = get_disk_io_for_pid(self.mock_proc)
         
-        # Verify default results on error
         self.assertEqual(read_bytes, 0)
         self.assertEqual(write_bytes, 0)
 
-    @patch('os.path.exists')
-    @patch('os.listdir')
-    def test_get_file_descriptor_count(self, mock_listdir, mock_exists):
-        """Test getting file descriptor count."""
-        # Mock directory exists and content
-        mock_exists.return_value = True
-        mock_listdir.return_value = ["0", "1", "2"]
+    def test_get_file_descriptor_count_success(self):
+        """Test successful file descriptor counting."""
+        # Mock open files and connections
+        self.mock_proc.open_files.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        self.mock_proc.connections.return_value = [MagicMock(), MagicMock()]
         
-        # Call function
-        count = get_file_descriptor_count("1234")
+        count = get_file_descriptor_count(self.mock_proc)
         
-        # Verify results
-        self.assertEqual(count, 3)
-        mock_exists.assert_called_once_with("/proc/1234/fd")
-        mock_listdir.assert_called_once_with("/proc/1234/fd")
+        self.assertEqual(count, 5)  # 3 files + 2 connections
 
-    @patch('os.path.exists')
-    def test_get_file_descriptor_count_no_dir(self, mock_exists):
-        """Test getting file descriptor count when directory doesn't exist."""
-        # Mock directory doesn't exist
-        mock_exists.return_value = False
+    def test_get_file_descriptor_count_access_denied(self):
+        """Test file descriptor counting when access is denied."""
+        self.mock_proc.open_files.side_effect = psutil.AccessDenied(1234)
         
-        # Call function
-        count = get_file_descriptor_count("1234")
+        count = get_file_descriptor_count(self.mock_proc)
         
-        # Verify results
         self.assertEqual(count, 0)
 
-    @patch('builtins.open')
-    def test_get_thread_count_from_status_file(self, mock_open):
-        """Test getting thread count from status file (preferred method)."""
-        # Mock status file content with thread info
-        mock_file = MagicMock()
-        mock_file.__enter__.return_value.read.return_value = "Threads: 5\n"
-        mock_open.return_value = mock_file
+    def test_get_thread_count_success(self):
+        """Test successful thread counting."""
+        self.mock_proc.num_threads.return_value = 8
         
-        # Call function
-        count = get_thread_count("1234")
+        count = get_thread_count(self.mock_proc)
         
-        # Verify results - should use status file first
-        self.assertEqual(count, 5)
-        mock_open.assert_called_once_with("/proc/1234/status", "r")
+        self.assertEqual(count, 8)
 
-    @patch('builtins.open')
-    @patch('os.path.exists')
-    @patch('os.listdir')
-    def test_get_thread_count_fallback_to_task_dir(self, mock_listdir, mock_exists, mock_open):
-        """Test fallback to task directory when status file fails."""
-        # Mock status file error
-        mock_open.side_effect = FileNotFoundError("No such file")
+    def test_get_thread_count_no_such_process(self):
+        """Test thread counting when process doesn't exist."""
+        self.mock_proc.num_threads.side_effect = psutil.NoSuchProcess(1234)
         
-        # Mock task directory exists with content
-        mock_exists.return_value = True
-        mock_listdir.return_value = ["1234", "1235", "1236"]
+        count = get_thread_count(self.mock_proc)
         
-        # Call function
-        count = get_thread_count("1234")
-        
-        # Verify results - should fall back to task directory
-        self.assertEqual(count, 3)
-        mock_exists.assert_called_once_with("/proc/1234/task")
-        mock_listdir.assert_called_once_with("/proc/1234/task")
+        self.assertEqual(count, 0)
 
-    @patch('subprocess.check_output')
-    @patch('os.path.exists')
-    @patch('builtins.open')
-    def test_get_thread_count_fallback_to_ps(self, mock_open, mock_exists, mock_check_output):
-        """Test fallback to ps command when both other methods fail."""
-        # Mock status file error
-        mock_open.side_effect = FileNotFoundError("No such file")
+    def test_get_context_switches_success(self):
+        """Test successful context switch retrieval."""
+        mock_ctx = MagicMock()
+        mock_ctx.voluntary = 1500
+        mock_ctx.involuntary = 500
+        self.mock_proc.num_ctx_switches.return_value = mock_ctx
         
-        # Mock task directory doesn't exist
-        mock_exists.return_value = False
+        vol_ctx, nonvol_ctx = get_context_switches(self.mock_proc)
         
-        # Mock ps command output
-        mock_check_output.return_value = b"NLWP\n4"
-        
-        # Call function
-        count = get_thread_count("1234")
-        
-        # Verify results - should fall back to ps command
-        self.assertEqual(count, 4)
-        mock_check_output.assert_called_once_with(
-            ["ps", "-o", "nlwp", "-p", "1234"],
-            stderr=subprocess.PIPE
-        )
+        self.assertEqual(vol_ctx, 1500)
+        self.assertEqual(nonvol_ctx, 500)
 
-    @patch('builtins.open')
-    def test_get_context_switches(self, mock_open):
-        """Test getting context switches."""
-        # Mock file content
-        mock_file = MagicMock()
-        mock_file.__enter__.return_value.read.return_value = """
-voluntary_ctxt_switches: 1000
-nonvoluntary_ctxt_switches: 2000
-"""
-        mock_open.return_value = mock_file
+    def test_get_context_switches_zombie_process(self):
+        """Test context switch retrieval for zombie process."""
+        self.mock_proc.num_ctx_switches.side_effect = psutil.ZombieProcess(1234)
         
-        # Call function
-        vol_ctx, nonvol_ctx = get_context_switches("1234")
+        vol_ctx, nonvol_ctx = get_context_switches(self.mock_proc)
         
-        # Verify results
-        self.assertEqual(vol_ctx, 1000)
-        self.assertEqual(nonvol_ctx, 2000)
-        mock_open.assert_called_once_with("/proc/1234/status", "r")
-
-    @patch('builtins.open')
-    def test_get_context_switches_error(self, mock_open):
-        """Test error handling in get_context_switches."""
-        # Mock file error
-        mock_open.side_effect = Exception("Test error")
-        
-        # Call function
-        vol_ctx, nonvol_ctx = get_context_switches("1234")
-        
-        # Verify default results on error
         self.assertEqual(vol_ctx, 0)
         self.assertEqual(nonvol_ctx, 0)
 
-    @patch('common.process_monitor.get_process_metrics')
-    @patch('builtins.print')
-    def test_report_metrics(self, mock_print, mock_get_metrics):
-        """Test report_metrics function."""
-        # Mock metrics
-        mock_metrics = {
-            "cpu_usage": 10.5,
-            "memory_usage": 20.3,
-            "process_count": 3
-        }
-        mock_get_metrics.return_value = mock_metrics
-        
-        # Create a mock for InstanaOTelConnector that will be used inside the function
-        mock_connector = MagicMock()
-        mock_connector_instance = MagicMock()
-        mock_connector.return_value = mock_connector_instance
-        mock_span = MagicMock()
-        mock_connector_instance.create_span.return_value.__enter__.return_value = mock_span
-        
-        # Patch the internal import inside report_metrics
-        with patch.dict('sys.modules', {'common.otel_connector': MagicMock()}):
-            # Set the InstanaOTelConnector class in the mocked module
-            sys.modules['common.otel_connector'].InstanaOTelConnector = mock_connector
-            
-            # Call function with patched import
-            report_metrics("TestProcess", "test.plugin")
-        
-        # Verify connector setup
-        mock_connector.assert_called_once()
-        mock_connector_instance.create_span.assert_called_once()
-        mock_connector_instance.record_metrics.assert_called_once_with(mock_metrics)
-        
-        # Verify print was called with JSON
-        mock_print.assert_called_once()
-
-    @patch('common.process_monitor.subprocess.check_output')
-    @patch('common.process_monitor.get_thread_count')
-    @patch('common.process_monitor.get_disk_io_for_pid')
-    @patch('common.process_monitor.get_file_descriptor_count')
-    @patch('common.process_monitor.get_context_switches')
-    @patch('common.process_monitor.get_process_cpu_per_core')
-    def test_parent_child_process_separation(self, mock_get_cpu_per_core, mock_get_ctx, 
-                                           mock_get_fds, mock_get_disk_io, 
-                                           mock_get_threads, mock_check_output):
-        """Test separation of parent and child processes."""
-        # Mock subprocess output with complex parent-child relationships using semicolon delimiter
-        mock_check_output.return_value = b"""1000;1;1.0;1.0;TestProcess
-1001;1000;0.5;0.5;TestProcess
-1002;1000;0.5;0.5;TestProcess
-2000;1;2.0;2.0;TestProcess
-2001;2000;1.0;1.0;TestProcess
-"""
-        # Mock function returns
-        mock_get_threads.side_effect = [5, 3]  # 5 for PID 1000, 3 for PID 2000
-        mock_get_disk_io.return_value = (1000, 2000)
-        mock_get_fds.return_value = 50
-        mock_get_ctx.return_value = (100, 200)
-        mock_get_cpu_per_core.return_value = {}
-        
-        # Call function
-        metrics = get_process_metrics("TestProcess")
-        
-        # Verify only parent processes are counted
-        self.assertEqual(metrics["process_count"], 2)  # Only PIDs 1000 and 2000
-        self.assertEqual(metrics["cpu_usage"], 3.0)  # 1.0 + 2.0
-        self.assertEqual(metrics["memory_usage"], 3.0)  # 1.0 + 2.0
-        self.assertEqual(metrics["thread_count"], 8)  # 5 + 3
-        self.assertEqual(metrics["monitored_pids"], "1000,2000")
-        
-        # Verify thread statistics
-        self.assertEqual(metrics["max_threads_per_process"], 5.0)
-        self.assertEqual(metrics["min_threads_per_process"], 3.0)
-        self.assertEqual(metrics["avg_threads_per_process"], 4.0)
-
-    @patch('multiprocessing.cpu_count')
-    def test_get_cpu_cores_count(self, mock_cpu_count):
-        """Test getting CPU cores count."""
-        # Mock multiprocessing.cpu_count
-        mock_cpu_count.return_value = 8
-        
-        # Call function
-        result = get_cpu_cores_count()
-        
-        # Verify result
-        self.assertEqual(result, 8)
-        mock_cpu_count.assert_called_once()
-
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_get_process_cpu_per_core_success(self, mock_check_output):
+    @patch('common.process_monitor.psutil.cpu_percent')
+    def test_get_process_cpu_per_core_success(self, mock_cpu_percent):
         """Test getting per-core CPU usage for a process."""
-        # Mock pidstat output with CPU core usage
-        mock_check_output.return_value = b"10:00:00 PM   1000  1.0  2.0  0.0  0.0  3.0   0\n10:00:00 PM   1000  2.0  1.0  0.0  0.0  3.0   1"
+        # Mock per-core CPU usage
+        mock_cpu_percent.return_value = [10.0, 20.0, 15.5, 5.2]
         
-        # Call function
-        result = get_process_cpu_per_core("1000")
+        result = get_process_cpu_per_core("1234")
         
-        # Verify result
-        self.assertEqual(result, {"cpu_core_0": 3.0, "cpu_core_1": 3.0})
-        mock_check_output.assert_called_once()
+        expected = {
+            "cpu_core_0": 10.0,
+            "cpu_core_1": 20.0,
+            "cpu_core_2": 15.5,
+            "cpu_core_3": 5.2
+        }
+        self.assertEqual(result, expected)
+        mock_cpu_percent.assert_called_once_with(percpu=True, interval=0.1)
 
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_get_process_cpu_per_core_command_not_found(self, mock_check_output):
-        """Test handling when pidstat command is not found."""
-        # Mock pidstat command not found
-        mock_check_output.return_value = b"pidstat: command not found"
+    @patch('common.process_monitor.psutil.cpu_percent')
+    def test_get_process_cpu_per_core_error(self, mock_cpu_percent):
+        """Test per-core CPU usage when psutil raises an exception."""
+        mock_cpu_percent.side_effect = Exception("CPU error")
         
-        # Call function
-        result = get_process_cpu_per_core("1000")
+        result = get_process_cpu_per_core("1234")
         
-        # Verify empty result when command not found
         self.assertEqual(result, {})
-        mock_check_output.assert_called_once()
 
-    @patch('common.process_monitor.subprocess.check_output')
-    def test_get_process_cpu_per_core_error(self, mock_check_output):
-        """Test error handling in get_process_cpu_per_core."""
-        # Mock subprocess error
-        mock_check_output.side_effect = Exception("Test error")
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_empty_process_output(self, mock_process_iter):
+        """Test handling of empty process list."""
+        mock_process_iter.return_value = []
         
-        # Call function
-        result = get_process_cpu_per_core("1000")
+        result = get_process_metrics("TestProcess")
         
-        # Verify empty result on error
-        self.assertEqual(result, {})
-        mock_check_output.assert_called_once()
+        self.assertIsNone(result)
+
+    @patch('common.process_monitor.psutil.process_iter')
+    def test_process_with_special_chars(self, mock_process_iter):
+        """Test handling of process names with special characters."""
+        # Create a mock process with special characters in name
+        mock_proc = MagicMock()
+        mock_proc.pid = 5678
+        mock_proc.ppid.return_value = 1
+        mock_proc.name.return_value = "Test-Process_1.2"
+        mock_proc.cpu_percent.return_value = 10.0
+        mock_proc.memory_percent.return_value = 5.0
+        mock_proc.info = {
+            'pid': 5678,
+            'ppid': 1,
+            'name': 'Test-Process_1.2',
+            'cpu_percent': 10.0,
+            'memory_percent': 5.0
+        }
+        
+        mock_process_iter.return_value = [mock_proc]
+        
+        # Mock helper functions to return basic values
+        with patch('common.process_monitor.get_disk_io_for_pid') as mock_disk_io, \
+             patch('common.process_monitor.get_file_descriptor_count') as mock_fd_count, \
+             patch('common.process_monitor.get_thread_count') as mock_thread_count, \
+             patch('common.process_monitor.get_context_switches') as mock_ctx_switches, \
+             patch('common.process_monitor.get_process_cpu_per_core') as mock_cpu_per_core:
+            
+            mock_disk_io.return_value = (0, 0)
+            mock_fd_count.return_value = 0
+            mock_thread_count.return_value = 1
+            mock_ctx_switches.return_value = (0, 0)
+            mock_cpu_per_core.return_value = {}
+            
+            result = get_process_metrics("Test-Process")
+            
+            self.assertIsNotNone(result)
+            self.assertEqual(result["cpu_usage"], 10.0)
+            self.assertEqual(result["memory_usage"], 5.0)
 
 if __name__ == '__main__':
     unittest.main()
