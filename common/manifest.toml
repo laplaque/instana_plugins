@@ -1,7 +1,7 @@
 [metadata]
-version = "0.0.20"
+version = "0.1.00"
 metadata_schema_version = "1.0"
-generated_at = "2025-06-12T14:45:54.007202Z"
+generated_at = "2025-06-16T16:53:00.000000Z"
 framework_name = "OpenTelemetry Process Monitor"
 python_version_min = "3.6"
 maintainer = "laplaque/instana_plugins Contributors"

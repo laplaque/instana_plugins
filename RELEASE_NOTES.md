@@ -1,5 +1,68 @@
 # Release Notes
 
+## Version 0.1.00 (2025-06-16)
+
+### feat: Enhanced --once Flag with Console Output & User Experience
+
+**🚀 Major Enhancement: --once Flag Console Output & User Experience**
+This release introduces significant improvements to the `--once` flag functionality, transforming it from a silent execution mode into a user-friendly debugging and testing tool with immediate console feedback.
+
+**✨ New Features:**
+- **Enhanced Console Output**: Displays collected metrics with visual indicators (✓) for success and helpful diagnostic messages (✗) for failures
+- **Real-time Feedback**: Immediate console output without requiring log file inspection
+- **Argument Validation**: Warning system alerts when `--once` and `--interval` flags conflict
+- **Help Text Updates**: Clear documentation of flag interactions and behaviors
+- **User Guidance**: Self-documenting command line interface
+
+**🔧 Technical Improvements:**
+- ✅ Skip daemonization when using `--once` flag to preserve console output
+- ✅ Enhanced console output for both success and failure scenarios
+- ✅ Argument validation with warning when `--once` and `--interval` are combined
+- ✅ Updated help text to clarify flag interactions and behaviors
+
+**📊 Benefits Summary:**
+- **Before v0.1.00**: Silent execution requiring log file inspection, no argument validation, confusing debugging experience
+- **After v0.1.00**: Immediate visual feedback with ✓/✗ indicators, clear diagnostic messages, argument validation, self-documenting interface
+
+**🎯 Use Cases Enhanced:**
+- **Debugging & Testing**: Immediate feedback for process monitoring validation
+- **Development Workflow**: Fast iteration testing during plugin development  
+- **Production Validation**: One-time health checks with clear success/failure indicators
+
+**Example Usage:**
+```bash
+# Success case
+$ python3 sensor.py --once
+✓ Successfully collected 21 metrics for 'python':
+  cpu_usage: 90.2
+  memory_usage: 0.37
+  [... all metrics displayed]
+
+# Failure case  
+$ python3 sensor.py --once
+✗ No processes found matching 'ProcessName'
+  This could mean:
+  - The process is not currently running
+  - The process name doesn't match the pattern
+  - Permission issues accessing process information
+
+# Argument conflict warning
+$ python3 sensor.py --once --interval 30
+Warning: --interval flag ignored when using --once mode
+```
+
+**🔄 Version Management:**
+- Version updated to `0.1.00` in `common/manifest.toml`
+- Dynamic version reading from TOML configuration maintained
+- Fallback default preserved for error scenarios
+
+**Impact:** Transforms `--once` from a silent execution mode into a powerful debugging and testing tool  
+**Compatibility:** Fully backward compatible with existing installations  
+**Migration:** No migration required - enhancements are automatically available  
+**Dependencies:** No new external dependencies required
+
+---
+
 ## Version 0.0.20 (2025-06-12)
 
 ### feat: Comprehensive TOML-Based Installation System
