@@ -16,14 +16,40 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Need full history to check tags
 
       - name: Find TAG file and create git tag
         run: |
-          # Find the TAG file in the merged PR
-          TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md" | head -1)
+          echo "🔍 Looking for TAG files in this repository..."
+          echo "Repository contents:"
+          ls -la
+          echo "docs/releases contents:"
+          ls -la docs/releases || echo "docs/releases directory not found"
           
-          if [ -z "$TAG_FILE" ]; then
-            echo "No TAG file found in merged PR. Skipping tag creation."
+          # Find the TAG file in the merged PR - check both root and docs/releases
+          echo "Searching for TAG files in root directory..."
+          ROOT_TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md" | head -1)
+          echo "Root TAG files found: $(find . -maxdepth 1 -name "TAG_v*.md" || echo "None")"
+          
+          echo "Searching for TAG files in docs/releases directory..."
+          DOCS_TAG_FILE=""
+          if [ -d "./docs/releases" ]; then
+            DOCS_TAG_FILE=$(find ./docs/releases -maxdepth 1 -name "TAG_v*.md" | head -1 || echo "")
+            echo "docs/releases TAG files found: $(find ./docs/releases -maxdepth 1 -name "TAG_v*.md" || echo "None")"
+          else
+            echo "docs/releases directory does not exist"
+          fi
+          
+          # Determine which TAG file to use
+          if [ -n "$ROOT_TAG_FILE" ]; then
+            TAG_FILE="$ROOT_TAG_FILE"
+            echo "✅ Found TAG file in root: $TAG_FILE"
+          elif [ -n "$DOCS_TAG_FILE" ]; then
+            TAG_FILE="$DOCS_TAG_FILE"
+            echo "✅ Found TAG file in docs/releases: $TAG_FILE"
+          else
+            echo "❌ No TAG file found in merged PR. Skipping tag creation."
             exit 0
           fi
           
