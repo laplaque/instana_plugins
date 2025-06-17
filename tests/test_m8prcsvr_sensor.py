@@ -16,8 +16,10 @@ class TestM8PrcSvrSensor(unittest.TestCase):
     
     def test_constants(self):
         """Test the sensor constants."""
-        from m8prcsvr.sensor import PROCESS_NAME, PLUGIN_NAME, VERSION
-        from common import VERSION as EXPECTED_VERSION
+        from m8prcsvr.sensor import PROCESS_NAME, PLUGIN_NAME
+        from common.toml_utils import get_manifest_value
+        VERSION = get_manifest_value('package.version', '0.1.0')
+        EXPECTED_VERSION = VERSION
         
         self.assertEqual(PROCESS_NAME, "M8PrcSvr")
         self.assertEqual(PLUGIN_NAME, "m8prcsvr")

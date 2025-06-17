@@ -1,5 +1,81 @@
 # Release Notes
 
+## Version 0.1.01 (2025-06-17)
+
+### feat: Database Connection Management Improvements & Metric Formatting Fixes
+
+**🔧 Database Connection Management Enhancements**
+This release implements a centralized database connection manager addressing GitHub Copilot code review recommendations for improved resource management and exception safety.
+
+**✅ Database Connection Improvements:**
+- **Centralized Connection Manager**: Implemented `_get_db_connection()` method providing single point of control for SQLite connections
+- **Context Manager Pattern**: All database operations now use proper context managers (`with` statements) for automatic resource cleanup  
+- **Exception Safety**: Improved error handling and connection cleanup in case of exceptions
+- **Code Consistency**: Standardized database connection pattern across all methods in `MetadataStore` class
+- **Maintainability**: Centralized connection logic eliminates code duplication and simplifies future modifications
+- **Resource Management**: Automatic cleanup prevents connection leaks and improves system stability
+
+**🔧 Technical Changes:**
+- **Enhanced `common/metadata_store.py`**: 
+  - Added centralized `_get_db_connection()` context manager method
+  - Updated critical database methods: `_cache_metrics_schema()`, `_get_current_schema_version()`, `_set_schema_version()`, migration methods, and CRUD operations
+  - Replaced manual connection/close patterns with context managers
+  - Maintained all existing functionality while improving reliability
+- **Addressed GitHub Copilot Review**: Resolved suggestion for using context managers in SQLite connections
+- **Code Quality**: Eliminated redundant connection handling code across 7+ database methods
+
+### fix: Critical Metric Formatting Fixes
+
+**🔧 Metric Display Fixes**
+This patch release resolves critical metric formatting issues discovered during testing, ensuring proper display of metrics in Instana UI with correct decimal precision and clean metric names.
+
+**✅ Issues Resolved:**
+- **Metric Names**: Removed trailing braces from metric names in Instana UI display
+- **Integer Decimals**: Fixed integer values displaying with unnecessary decimal places (15.000 → 15)
+- **Percentage Display**: Corrected percentage metrics to show proper decimal precision (42.678912 → 42.68)
+
+**🔧 Technical Changes:**
+- **Enhanced `common/otel_connector.py`**: 
+  - Added dynamic reading of `decimals` field from `manifest.toml` metric definitions
+  - Implemented proper formatting based on metric configuration (percentage vs integer vs float)
+  - Fixed metric name cleaning to remove trailing braces using metadata store functionality
+- **Updated metric formatting logic**: Applied manifest-specified decimal places instead of hardcoded 3-decimal formatting
+- **Maintained backward compatibility**: Existing installations continue to work unchanged
+
+**📊 Before/After Examples:**
+```
+Before v0.1.01:
+- cpu_usage{}: 42.678912 (excessive decimals)
+- process_count{}: 15.000 (unnecessary decimals)
+- memory_usage{}: 85.234567 (excessive decimals)
+
+After v0.1.01:
+- cpu_usage: 42.68 (proper 2-decimal percentage)
+- process_count: 15 (clean integer)
+- memory_usage: 85.23 (proper 2-decimal percentage)
+```
+
+**🎯 Impact:**
+- **Database Reliability**: Improved connection management prevents resource leaks and enhances system stability
+- **Code Maintainability**: Centralized connection handling simplifies future database enhancements
+- **User Experience**: Clean, professional metric display in Instana UI
+- **Data Accuracy**: Proper decimal precision based on metric type and configuration
+- **Display Quality**: Eliminates visual clutter from excessive decimal places and naming artifacts
+
+**✅ Testing:**
+- All database tests pass with new connection manager implementation
+- Verified formatting fixes with comprehensive test suite
+- Confirmed proper decimal handling for all metric types (Gauge, Counter, UpDownCounter)
+- Validated metric name cleaning functionality
+- All existing tests continue to pass
+
+**🔄 Deployment:**
+- **Zero Downtime**: Can be deployed without service interruption
+- **No Migration**: No database or configuration changes required
+- **Immediate Effect**: Improvements visible immediately after deployment
+
+---
+
 ## Version 0.1.00 (2025-06-16)
 
 ### feat: Enhanced --once Flag with Console Output & User Experience

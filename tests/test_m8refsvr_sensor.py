@@ -16,8 +16,10 @@ class TestM8RefSvrSensor(unittest.TestCase):
     
     def test_constants(self):
         """Test that the sensor constants are correctly defined."""
-        from m8refsvr.sensor import PROCESS_NAME, PLUGIN_NAME, VERSION
-        from common import VERSION as EXPECTED_VERSION
+        from m8refsvr.sensor import PROCESS_NAME, PLUGIN_NAME
+        from common.toml_utils import get_manifest_value
+        VERSION = get_manifest_value('package.version', '0.1.0')
+        EXPECTED_VERSION = VERSION
         self.assertEqual(PROCESS_NAME, "M8RefSvr")
         self.assertEqual(PLUGIN_NAME, "m8refsvr")
         self.assertEqual(VERSION, EXPECTED_VERSION)
@@ -37,8 +39,10 @@ class TestM8RefSvrSensor(unittest.TestCase):
                 run_sensor_kwargs = {}
                 
                 # Extract the actual parameters from the module
-                from m8refsvr import SERVICE_NAMESPACE, PROCESS_NAME, PLUGIN_NAME
-                from common import VERSION
+                from m8refsvr.sensor import PROCESS_NAME, PLUGIN_NAME
+                from common.toml_utils import get_manifest_value
+                VERSION = get_manifest_value('package.version', '0.1.0')
+                SERVICE_NAMESPACE = "MicroStrategy"
                 
                 # Mock the actual call that would happen in __main__
                 mock_run_sensor(PROCESS_NAME, PLUGIN_NAME, VERSION, service_namespace=SERVICE_NAMESPACE)

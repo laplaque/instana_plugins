@@ -116,7 +116,7 @@ graph TD
 
 If you want to create your own process monitoring plugins using this framework:
 
-📖 **[Developer's Guide](DEVELOPER_GUIDE.md)** - Complete guide for creating custom plugins
+📖 **[Developer's Guide](docs/development/DEVELOPER_GUIDE.md)** - Complete guide for creating custom plugins
 
 ### Requirements
 
@@ -574,7 +574,7 @@ python -m unittest discover tests
 
 ## Release Notes
 
-For a detailed history of changes and improvements, see the [Release Notes](RELEASE_NOTES.md).
+For a detailed history of changes and improvements, see the [Release Notes](docs/releases/RELEASE_NOTES.md).
 
 ## License
 

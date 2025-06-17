@@ -18,9 +18,10 @@ import re
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 
-# Import schema version for migrations
+# Import schema version for migrations from manifest.toml
 try:
-    from common import METADATA_SCHEMA_VERSION
+    from common.toml_utils import get_manifest_value
+    METADATA_SCHEMA_VERSION = get_manifest_value('metadata.metadata_schema_version', '1.0')
 except ImportError:
     METADATA_SCHEMA_VERSION = "1.0"  # Fallback if import fails
 
@@ -98,8 +99,14 @@ class MetadataStore:
         self.db_path = db_path
         logger.info(f"Using metadata database at: {self.db_path}")
         
+        # Initialize schema cache
+        self.metrics_columns = None
+        
         # Initialize the database schema
         self._init_db()
+        
+        # Cache the metrics table schema after initialization
+        self._cache_metrics_schema()
         
     def _init_db(self):
         """Initialize the database schema and run migrations if needed."""
@@ -112,6 +119,39 @@ class MetadataStore:
             logger.error(f"Error initializing database: {e}")
             raise
     
+    def _get_db_connection(self):
+        """
+        Context manager for database connections.
+        
+        Provides consistent connection handling with automatic cleanup
+        and proper exception handling.
+        
+        Returns:
+            sqlite3.Connection: Database connection context manager
+        """
+        return sqlite3.connect(self.db_path)
+    
+    def _cache_metrics_schema(self):
+        """
+        Cache the metrics table schema to avoid repeated PRAGMA calls.
+        This improves performance by eliminating database queries on every metric operation.
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Get metrics table schema once and cache it
+                cursor.execute("PRAGMA table_info(metrics)")
+                columns = [column[1] for column in cursor.fetchall()]
+                self.metrics_columns = set(columns)
+                
+            logger.debug(f"Cached metrics table schema: {len(self.metrics_columns)} columns")
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error caching metrics schema: {e}")
+            # Fall back to None, which will trigger the old behavior
+            self.metrics_columns = None
+    
     def _get_current_schema_version(self) -> Optional[str]:
         """
         Get the current schema version from the database.
@@ -120,26 +160,24 @@ class MetadataStore:
             Current schema version or None if no version table exists
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Check if schema_version table exists
-            cursor.execute("""
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name='schema_version'
-            """)
-            
-            if not cursor.fetchone():
-                conn.close()
-                return None
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
                 
-            # Get current version
-            cursor.execute("SELECT version FROM schema_version ORDER BY updated_date DESC LIMIT 1")
-            result = cursor.fetchone()
-            
-            conn.close()
-            return result[0] if result else None
-            
+                # Check if schema_version table exists
+                cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name='schema_version'
+                """)
+                
+                if not cursor.fetchone():
+                    return None
+                    
+                # Get current version
+                cursor.execute("SELECT version FROM schema_version ORDER BY updated_date DESC LIMIT 1")
+                result = cursor.fetchone()
+                
+                return result[0] if result else None
+                
         except sqlite3.Error as e:
             logger.error(f"Error getting schema version: {e}")
             return None
@@ -152,30 +190,29 @@ class MetadataStore:
             version: Schema version to set
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Create schema_version table if it doesn't exist
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    version TEXT NOT NULL,
-                    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Insert new version record
-            now = datetime.now().isoformat()
-            cursor.execute("""
-                INSERT INTO schema_version (version, created_date, updated_date)
-                VALUES (?, ?, ?)
-            """, (version, now, now))
-            
-            conn.commit()
-            conn.close()
-            logger.info(f"Set schema version to: {version}")
-            
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Create schema_version table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS schema_version (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        version TEXT NOT NULL,
+                        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Insert new version record
+                now = datetime.now().isoformat()
+                cursor.execute("""
+                    INSERT INTO schema_version (version, created_date, updated_date)
+                    VALUES (?, ?, ?)
+                """, (version, now, now))
+                
+                conn.commit()
+                logger.info(f"Set schema version to: {version}")
+                
         except sqlite3.Error as e:
             logger.error(f"Error setting schema version: {e}")
             raise
@@ -192,17 +229,16 @@ class MetadataStore:
             has_legacy_data = False
             
             if database_exists:
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                
-                # Check if any tables exist (indicating legacy data)
-                cursor.execute("""
-                    SELECT name FROM sqlite_master 
-                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
-                """)
-                tables = cursor.fetchall()
-                has_legacy_data = len(tables) > 0
-                conn.close()
+                with self._get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    
+                    # Check if any tables exist (indicating legacy data)
+                    cursor.execute("""
+                        SELECT name FROM sqlite_master 
+                        WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                    """)
+                    tables = cursor.fetchall()
+                    has_legacy_data = len(tables) > 0
             
             if has_legacy_data:
                 logger.warning("Legacy metadata database detected. Previous metadata will be deleted and recreated for schema v1.0")
@@ -212,92 +248,91 @@ class MetadataStore:
                 logger.info("Legacy metadata database deleted")
             
             # Create fresh database with v1.0 schema
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Create hosts table
-            cursor.execute("""
-            CREATE TABLE hosts (
-                id TEXT PRIMARY KEY,
-                hostname TEXT UNIQUE,
-                first_seen TIMESTAMP,
-                last_seen TIMESTAMP
-            )
-            """)
-            
-            # Create service_namespaces table
-            cursor.execute("""
-            CREATE TABLE service_namespaces (
-                id TEXT PRIMARY KEY,
-                namespace TEXT UNIQUE,
-                first_seen TIMESTAMP,
-                last_seen TIMESTAMP
-            )
-            """)
-            
-            # Create services table
-            cursor.execute("""
-            CREATE TABLE IF NOT EXISTS services (
-                id TEXT PRIMARY KEY,
-                full_name TEXT UNIQUE,
-                display_name TEXT,
-                version TEXT,
-                description TEXT,
-                host_id TEXT,
-                namespace_id TEXT,
-                first_seen TIMESTAMP,
-                last_seen TIMESTAMP,
-                FOREIGN KEY (host_id) REFERENCES hosts(id),
-                FOREIGN KEY (namespace_id) REFERENCES service_namespaces(id)
-            )
-            """)
-            
-            # Create metrics table
-            cursor.execute("""
-            CREATE TABLE metrics (
-                id TEXT PRIMARY KEY,
-                service_id TEXT,
-                name TEXT,
-                display_name TEXT,
-                unit TEXT,
-                format_type TEXT,
-                decimal_places INTEGER DEFAULT 2,
-                is_percentage BOOLEAN DEFAULT 0,
-                is_counter BOOLEAN DEFAULT 0,
-                first_seen TIMESTAMP,
-                last_seen TIMESTAMP,
-                FOREIGN KEY (service_id) REFERENCES services(id),
-                UNIQUE(service_id, name)
-            )
-            """)
-            
-            # Create format rules table
-            cursor.execute("""
-            CREATE TABLE format_rules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                pattern TEXT UNIQUE,
-                replacement TEXT,
-                rule_type TEXT,
-                priority INTEGER
-            )
-            """)
-            
-            # Add default format rules
-            default_rules = [
-                ("cpu", "CPU", "word_replacement", 100),
-                ("_", " ", "character_replacement", 50),
-                ("word_start", "capitalize", "word_formatting", 10)
-            ]
-            
-            for pattern, replacement, rule_type, priority in default_rules:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Create hosts table
                 cursor.execute("""
-                INSERT INTO format_rules
-                (pattern, replacement, rule_type, priority)
-                VALUES (?, ?, ?, ?)
-                """, (pattern, replacement, rule_type, priority))
-            
-            conn.commit()
-            conn.close()
+                CREATE TABLE hosts (
+                    id TEXT PRIMARY KEY,
+                    hostname TEXT UNIQUE,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP
+                )
+                """)
+                
+                # Create service_namespaces table
+                cursor.execute("""
+                CREATE TABLE service_namespaces (
+                    id TEXT PRIMARY KEY,
+                    namespace TEXT UNIQUE,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP
+                )
+                """)
+                
+                # Create services table
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS services (
+                    id TEXT PRIMARY KEY,
+                    full_name TEXT UNIQUE,
+                    display_name TEXT,
+                    version TEXT,
+                    description TEXT,
+                    host_id TEXT,
+                    namespace_id TEXT,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP,
+                    FOREIGN KEY (host_id) REFERENCES hosts(id),
+                    FOREIGN KEY (namespace_id) REFERENCES service_namespaces(id)
+                )
+                """)
+                
+                # Create metrics table
+                cursor.execute("""
+                CREATE TABLE metrics (
+                    id TEXT PRIMARY KEY,
+                    service_id TEXT,
+                    name TEXT,
+                    display_name TEXT,
+                    unit TEXT,
+                    format_type TEXT,
+                    decimal_places INTEGER DEFAULT 2,
+                    is_percentage BOOLEAN DEFAULT 0,
+                    is_counter BOOLEAN DEFAULT 0,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP,
+                    FOREIGN KEY (service_id) REFERENCES services(id),
+                    UNIQUE(service_id, name)
+                )
+                """)
+                
+                # Create format rules table
+                cursor.execute("""
+                CREATE TABLE format_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pattern TEXT UNIQUE,
+                    replacement TEXT,
+                    rule_type TEXT,
+                    priority INTEGER
+                )
+                """)
+                
+                # Add default format rules
+                default_rules = [
+                    ("cpu", "CPU", "word_replacement", 100),
+                    ("_", " ", "character_replacement", 50),
+                    ("word_start", "capitalize", "word_formatting", 10)
+                ]
+                
+                for pattern, replacement, rule_type, priority in default_rules:
+                    cursor.execute("""
+                    INSERT INTO format_rules
+                    (pattern, replacement, rule_type, priority)
+                    VALUES (?, ?, ?, ?)
+                    """, (pattern, replacement, rule_type, priority))
+                
+                conn.commit()
             
             # Set schema version
             self._set_schema_version("1.0")
@@ -305,6 +340,61 @@ class MetadataStore:
             
         except (sqlite3.Error, OSError) as e:
             logger.error(f"Error migrating to version 1.0: {e}")
+            raise
+
+    def _migrate_to_version_2_0(self):
+        """
+        Migrate database from version 1.0 to version 2.0.
+        
+        Adds otel_type column to metrics table with intelligent type inference.
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                logger.info("Migrating database from version 1.0 to 2.0...")
+                
+                # Check if otel_type column already exists
+                cursor.execute("PRAGMA table_info(metrics)")
+                columns = [column[1] for column in cursor.fetchall()]
+                
+                if 'otel_type' not in columns:
+                    # Add otel_type column with default value
+                    cursor.execute("ALTER TABLE metrics ADD COLUMN otel_type TEXT DEFAULT 'Gauge'")
+                    logger.info("Added otel_type column to metrics table")
+                    
+                    # Intelligent type inference for existing metrics
+                    cursor.execute("SELECT id, name, is_counter FROM metrics")
+                    metrics = cursor.fetchall()
+                    
+                    migration_stats = {'Gauge': 0, 'Counter': 0, 'UpDownCounter': 0}
+                    
+                    for metric_id, name, is_counter in metrics:
+                        # Infer OpenTelemetry type based on metric characteristics
+                        if is_counter:
+                            if any(keyword in name.lower() for keyword in ['bytes', 'switches', 'read', 'write']):
+                                otel_type = 'Counter'  # Monotonic counters
+                            else:
+                                otel_type = 'UpDownCounter'  # Can go up/down
+                        else:
+                            otel_type = 'Gauge'  # Instantaneous values
+                        
+                        # Update the metric with inferred type
+                        cursor.execute("UPDATE metrics SET otel_type = ? WHERE id = ?", (otel_type, metric_id))
+                        migration_stats[otel_type] += 1
+                    
+                    logger.info(f"Migration statistics: {migration_stats}")
+                else:
+                    logger.info("otel_type column already exists, skipping schema modification")
+                
+                conn.commit()
+            
+            # Set schema version
+            self._set_schema_version("2.0")
+            logger.info("Database migrated to schema version 2.0")
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error migrating to version 2.0: {e}")
             raise
     
     def _run_migrations(self):
@@ -318,16 +408,25 @@ class MetadataStore:
         
         if current_version is None:
             # No version info - treat as legacy or new database
-            logger.info("No schema version found, migrating to version 1.0")
-            self._migrate_to_version_1_0()
+            if target_version == "2.0":
+                # Create database with v1.0 first, then migrate to v2.0
+                logger.info("No schema version found, creating v1.0 then migrating to v2.0")
+                self._migrate_to_version_1_0()
+                self._migrate_to_version_2_0()
+            else:
+                logger.info("No schema version found, migrating to version 1.0")
+                self._migrate_to_version_1_0()
             
         elif current_version != target_version:
-            # Version mismatch - for now, only handle 1.0
-            if target_version == "1.0":
+            # Handle specific migration paths
+            if current_version == "1.0" and target_version == "2.0":
+                logger.info(f"Migrating from version {current_version} to {target_version}")
+                self._migrate_to_version_2_0()
+            elif target_version == "1.0":
                 logger.info(f"Migrating from version {current_version} to {target_version}")
                 self._migrate_to_version_1_0()
             else:
-                logger.warning(f"Unknown target version {target_version}, staying at {current_version}")
+                logger.warning(f"Unknown migration path from {current_version} to {target_version}")
                 
         else:
             logger.debug(f"Schema is already at target version {target_version}")
@@ -343,44 +442,43 @@ class MetadataStore:
             Host UUID
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Check if host exists
-            cursor.execute(
-                "SELECT id FROM hosts WHERE hostname = ?",
-                (hostname,)
-            )
-            result = cursor.fetchone()
-            
-            now = datetime.now().isoformat()
-            
-            if result:
-                # Host exists, update last_seen
-                host_id = result[0]
-                cursor.execute(
-                    "UPDATE hosts SET last_seen = ? WHERE id = ?",
-                    (now, host_id)
-                )
-                conn.commit()
-                logger.debug(f"Using existing host: {hostname} (ID: {host_id})")
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
                 
-            else:
-                # Host doesn't exist, create new
-                host_id = str(uuid.uuid4())
+                # Check if host exists
                 cursor.execute(
-                    """
-                    INSERT INTO hosts 
-                    (id, hostname, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (host_id, hostname, now, now)
+                    "SELECT id FROM hosts WHERE hostname = ?",
+                    (hostname,)
                 )
-                conn.commit()
-                logger.info(f"Created new host: {hostname} (ID: {host_id})")
+                result = cursor.fetchone()
                 
-            conn.close()
-            return host_id
+                now = datetime.now().isoformat()
+                
+                if result:
+                    # Host exists, update last_seen
+                    host_id = result[0]
+                    cursor.execute(
+                        "UPDATE hosts SET last_seen = ? WHERE id = ?",
+                        (now, host_id)
+                    )
+                    conn.commit()
+                    logger.debug(f"Using existing host: {hostname} (ID: {host_id})")
+                    
+                else:
+                    # Host doesn't exist, create new
+                    host_id = str(uuid.uuid4())
+                    cursor.execute(
+                        """
+                        INSERT INTO hosts 
+                        (id, hostname, first_seen, last_seen)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (host_id, hostname, now, now)
+                    )
+                    conn.commit()
+                    logger.info(f"Created new host: {hostname} (ID: {host_id})")
+                    
+                return host_id
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_or_create_host: {e}")
@@ -398,44 +496,43 @@ class MetadataStore:
             Service namespace UUID
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Check if namespace exists
-            cursor.execute(
-                "SELECT id FROM service_namespaces WHERE namespace = ?",
-                (namespace,)
-            )
-            result = cursor.fetchone()
-            
-            now = datetime.now().isoformat()
-            
-            if result:
-                # Namespace exists, update last_seen
-                namespace_id = result[0]
-                cursor.execute(
-                    "UPDATE service_namespaces SET last_seen = ? WHERE id = ?",
-                    (now, namespace_id)
-                )
-                conn.commit()
-                logger.debug(f"Using existing namespace: {namespace} (ID: {namespace_id})")
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
                 
-            else:
-                # Namespace doesn't exist, create new
-                namespace_id = str(uuid.uuid4())
+                # Check if namespace exists
                 cursor.execute(
-                    """
-                    INSERT INTO service_namespaces 
-                    (id, namespace, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (namespace_id, namespace, now, now)
+                    "SELECT id FROM service_namespaces WHERE namespace = ?",
+                    (namespace,)
                 )
-                conn.commit()
-                logger.info(f"Created new namespace: {namespace} (ID: {namespace_id})")
+                result = cursor.fetchone()
                 
-            conn.close()
-            return namespace_id
+                now = datetime.now().isoformat()
+                
+                if result:
+                    # Namespace exists, update last_seen
+                    namespace_id = result[0]
+                    cursor.execute(
+                        "UPDATE service_namespaces SET last_seen = ? WHERE id = ?",
+                        (now, namespace_id)
+                    )
+                    conn.commit()
+                    logger.debug(f"Using existing namespace: {namespace} (ID: {namespace_id})")
+                    
+                else:
+                    # Namespace doesn't exist, create new
+                    namespace_id = str(uuid.uuid4())
+                    cursor.execute(
+                        """
+                        INSERT INTO service_namespaces 
+                        (id, namespace, first_seen, last_seen)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (namespace_id, namespace, now, now)
+                    )
+                    conn.commit()
+                    logger.info(f"Created new namespace: {namespace} (ID: {namespace_id})")
+                    
+                return namespace_id
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_or_create_service_namespace: {e}")
@@ -457,23 +554,11 @@ class MetadataStore:
             Tuple of (service_id, display_name)
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
             # Sanitize full name for technical storage
             sanitized_name = self.sanitize_for_metrics(full_name)
             
             # Extract display name from original full name for human readability
             display_name = self._extract_service_display_name(full_name)
-            
-            # Check if service exists using sanitized name
-            cursor.execute(
-                "SELECT id, display_name FROM services WHERE full_name = ?",
-                (sanitized_name,)
-            )
-            result = cursor.fetchone()
-            
-            now = datetime.now().isoformat()
             
             # Get or create host and namespace IDs if provided
             host_id = None
@@ -484,54 +569,65 @@ class MetadataStore:
             if service_namespace:
                 namespace_id = self.get_or_create_service_namespace(service_namespace)
             
-            if result:
-                # Service exists, update last_seen
-                service_id, existing_display_name = result
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
                 
-                # Get existing version and description if new ones aren't provided
-                if not version or not description:
+                # Check if service exists using sanitized name
+                cursor.execute(
+                    "SELECT id, display_name FROM services WHERE full_name = ?",
+                    (sanitized_name,)
+                )
+                result = cursor.fetchone()
+                
+                now = datetime.now().isoformat()
+                
+                if result:
+                    # Service exists, update last_seen
+                    service_id, existing_display_name = result
+                    
+                    # Get existing version and description if new ones aren't provided
+                    if not version or not description:
+                        cursor.execute(
+                            "SELECT version, description FROM services WHERE id = ?",
+                            (service_id,)
+                        )
+                        existing_values = cursor.fetchone()
+                        if existing_values:
+                            existing_version, existing_description = existing_values
+                            # Use existing values if new ones aren't provided
+                            if not version:
+                                version = existing_version
+                            if not description:
+                                description = existing_description
+                    
+                    # Update service information
                     cursor.execute(
-                        "SELECT version, description FROM services WHERE id = ?",
-                        (service_id,)
+                        """
+                        UPDATE services 
+                        SET display_name = ?, version = ?, description = ?, host_id = ?, namespace_id = ?, last_seen = ? 
+                        WHERE id = ?
+                        """,
+                        (display_name, version, description, host_id, namespace_id, now, service_id)
                     )
-                    existing_values = cursor.fetchone()
-                    if existing_values:
-                        existing_version, existing_description = existing_values
-                        # Use existing values if new ones aren't provided
-                        if not version:
-                            version = existing_version
-                        if not description:
-                            description = existing_description
-                
-                # Update service information
-                cursor.execute(
-                    """
-                    UPDATE services 
-                    SET display_name = ?, version = ?, description = ?, host_id = ?, namespace_id = ?, last_seen = ? 
-                    WHERE id = ?
-                    """,
-                    (display_name, version, description, host_id, namespace_id, now, service_id)
-                )
-                
-                conn.commit()
-                logger.debug(f"Using existing service: {full_name} (ID: {service_id})")
-                
-            else:
-                # Service doesn't exist, create new
-                service_id = str(uuid.uuid4())
-                cursor.execute(
-                    """
-                    INSERT INTO services 
-                    (id, full_name, display_name, version, description, host_id, namespace_id, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (service_id, sanitized_name, display_name, version, description, host_id, namespace_id, now, now)
-                )
-                conn.commit()
-                logger.info(f"Created new service: {full_name} → {sanitized_name} (ID: {service_id})")
-                
-            conn.close()
-            return service_id, display_name
+                    
+                    conn.commit()
+                    logger.debug(f"Using existing service: {full_name} (ID: {service_id})")
+                    
+                else:
+                    # Service doesn't exist, create new
+                    service_id = str(uuid.uuid4())
+                    cursor.execute(
+                        """
+                        INSERT INTO services 
+                        (id, full_name, display_name, version, description, host_id, namespace_id, first_seen, last_seen)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (service_id, sanitized_name, display_name, version, description, host_id, namespace_id, now, now)
+                    )
+                    conn.commit()
+                    logger.info(f"Created new service: {full_name} → {sanitized_name} (ID: {service_id})")
+                    
+                return service_id, display_name
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_or_create_service: {e}")
@@ -548,7 +644,8 @@ class MetadataStore:
         format_type: str = "number",
         decimal_places: int = 2,
         is_percentage: bool = False,
-        is_counter: bool = False
+        is_counter: bool = False,
+        otel_type: str = "Gauge"
     ) -> Tuple[str, str]:
         """
         Get existing metric ID or create a new one if it doesn't exist.
@@ -560,69 +657,105 @@ class MetadataStore:
             format_type: How to format the value (number, percentage, bytes, etc.)
             decimal_places: Number of decimal places for rounding
             is_percentage: Whether this metric should be displayed as a percentage
+            is_counter: Whether this metric is a counter (integer)
+            otel_type: OpenTelemetry metric type (Gauge, Counter, UpDownCounter)
             
         Returns:
             Tuple of (metric_id, display_name)
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Format display name
-            display_name = self._format_metric_name(name)
-            
-            # Check if metric exists
-            cursor.execute(
-                "SELECT id, display_name FROM metrics WHERE service_id = ? AND name = ?",
-                (service_id, name)
-            )
-            result = cursor.fetchone()
-            
-            now = datetime.now().isoformat()
-            
-            if result:
-                # Metric exists, update last_seen
-                metric_id, existing_display_name = result
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
                 
-                # Update display name if it has changed
-                if existing_display_name != display_name:
-                    cursor.execute(
-                        """
-                        UPDATE metrics 
-                        SET display_name = ?, unit = ?, format_type = ?, 
-                            decimal_places = ?, is_percentage = ?, last_seen = ? 
-                        WHERE id = ?
-                        """,
-                        (display_name, unit, format_type, decimal_places, 
-                         is_percentage, now, metric_id)
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE metrics SET last_seen = ? WHERE id = ?",
-                        (now, metric_id)
-                    )
+                # Format display name
+                display_name = self._format_metric_name(name)
                 
-                conn.commit()
-                logger.debug(f"Using existing metric: {name} (ID: {metric_id})")
-                
-            else:
-                # Metric doesn't exist, create new
-                metric_id = str(uuid.uuid4())
+                # Check if metric exists
                 cursor.execute(
-                    """
-                    INSERT INTO metrics 
-                    (id, service_id, name, display_name, unit, format_type, 
-                     decimal_places, is_percentage, is_counter, first_seen, last_seen)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (metric_id, service_id, name, display_name, unit, format_type,
-                     decimal_places, is_percentage, is_counter, now, now)
+                    "SELECT id, display_name FROM metrics WHERE service_id = ? AND name = ?",
+                    (service_id, name)
                 )
-                conn.commit()
-                logger.info(f"Created new metric: {name} (ID: {metric_id})")
+                result = cursor.fetchone()
                 
-            conn.close()
-            return metric_id, display_name
+                now = datetime.now().isoformat()
+                
+                if result:
+                    # Metric exists, update last_seen and other fields
+                    metric_id, existing_display_name = result
+                    
+                    # Use cached columns to check for otel_type field
+                    if self.metrics_columns and 'otel_type' in self.metrics_columns:
+                        # Update with otel_type field
+                        cursor.execute(
+                            """
+                            UPDATE metrics 
+                            SET display_name = ?, unit = ?, format_type = ?, 
+                                decimal_places = ?, is_percentage = ?, otel_type = ?, last_seen = ? 
+                            WHERE id = ?
+                            """,
+                            (display_name, unit, format_type, decimal_places, 
+                             is_percentage, otel_type, now, metric_id)
+                        )
+                    else:
+                        # Update without otel_type field (schema v1.0 fallback)
+                        if self.metrics_columns is None:
+                            logger.warning("Metrics schema cache is not available, falling back to legacy update pattern")
+                        elif 'otel_type' not in self.metrics_columns:
+                            logger.debug(f"Schema inconsistency detected: 'otel_type' column not found in cached schema. Available columns: {sorted(self.metrics_columns)}")
+                        
+                        cursor.execute(
+                            """
+                            UPDATE metrics 
+                            SET display_name = ?, unit = ?, format_type = ?, 
+                                decimal_places = ?, is_percentage = ?, last_seen = ? 
+                            WHERE id = ?
+                            """,
+                            (display_name, unit, format_type, decimal_places, 
+                             is_percentage, now, metric_id)
+                        )
+                    
+                    conn.commit()
+                    logger.debug(f"Using existing metric: {name} (ID: {metric_id})")
+                    
+                else:
+                    # Metric doesn't exist, create new
+                    metric_id = str(uuid.uuid4())
+                    
+                    # Use cached columns to check for otel_type field
+                    if self.metrics_columns and 'otel_type' in self.metrics_columns:
+                        # Insert with otel_type field
+                        cursor.execute(
+                            """
+                            INSERT INTO metrics 
+                            (id, service_id, name, display_name, unit, format_type, 
+                             decimal_places, is_percentage, is_counter, otel_type, first_seen, last_seen)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (metric_id, service_id, name, display_name, unit, format_type,
+                             decimal_places, is_percentage, is_counter, otel_type, now, now)
+                        )
+                    else:
+                        # Insert without otel_type field (schema v1.0 fallback)
+                        if self.metrics_columns is None:
+                            logger.warning("Metrics schema cache is not available, falling back to legacy insert pattern")
+                        elif 'otel_type' not in self.metrics_columns:
+                            logger.debug(f"Schema inconsistency detected: 'otel_type' column not found in cached schema. Available columns: {sorted(self.metrics_columns)}")
+                        
+                        cursor.execute(
+                            """
+                            INSERT INTO metrics 
+                            (id, service_id, name, display_name, unit, format_type, 
+                             decimal_places, is_percentage, is_counter, first_seen, last_seen)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (metric_id, service_id, name, display_name, unit, format_type,
+                             decimal_places, is_percentage, is_counter, now, now)
+                        )
+                    
+                    conn.commit()
+                    logger.info(f"Created new metric: {name} (ID: {metric_id}, Type: {otel_type})")
+                    
+                return metric_id, display_name
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_or_create_metric: {e}")
@@ -642,30 +775,28 @@ class MetadataStore:
             Dictionary of service information or None if not found
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                """
-                SELECT id, full_name, display_name, version, description
-                FROM services
-                WHERE id = ?
-                """,
-                (service_id,)
-            )
-            result = cursor.fetchone()
-            
-            conn.close()
-            
-            if result:
-                return {
-                    'id': result[0],
-                    'full_name': result[1],
-                    'display_name': result[2],
-                    'version': result[3],
-                    'description': result[4]
-                }
-            return None
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(
+                    """
+                    SELECT id, full_name, display_name, version, description
+                    FROM services
+                    WHERE id = ?
+                    """,
+                    (service_id,)
+                )
+                result = cursor.fetchone()
+                
+                if result:
+                    return {
+                        'id': result[0],
+                        'full_name': result[1],
+                        'display_name': result[2],
+                        'version': result[3],
+                        'description': result[4]
+                    }
+                return None
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_service_info: {e}")
@@ -682,33 +813,31 @@ class MetadataStore:
             List of metric information dictionaries
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                """
-                SELECT id, name, display_name, unit, format_type, decimal_places, is_percentage
-                FROM metrics
-                WHERE service_id = ?
-                """,
-                (service_id,)
-            )
-            results = cursor.fetchall()
-            
-            conn.close()
-            
-            return [
-                {
-                    'id': row[0],
-                    'name': row[1],
-                    'display_name': row[2],
-                    'unit': row[3],
-                    'format_type': row[4],
-                    'decimal_places': row[5],
-                    'is_percentage': bool(row[6])
-                }
-                for row in results
-            ]
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(
+                    """
+                    SELECT id, name, display_name, unit, format_type, decimal_places, is_percentage
+                    FROM metrics
+                    WHERE service_id = ?
+                    """,
+                    (service_id,)
+                )
+                results = cursor.fetchall()
+                
+                return [
+                    {
+                        'id': row[0],
+                        'name': row[1],
+                        'display_name': row[2],
+                        'unit': row[3],
+                        'format_type': row[4],
+                        'decimal_places': row[5],
+                        'is_percentage': bool(row[6])
+                    }
+                    for row in results
+                ]
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_metrics_for_service: {e}")
@@ -726,31 +855,29 @@ class MetadataStore:
             Dictionary of metric information or None if not found
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                """
-                SELECT id, display_name, unit, format_type, decimal_places, is_percentage
-                FROM metrics
-                WHERE service_id = ? AND name = ?
-                """,
-                (service_id, name)
-            )
-            result = cursor.fetchone()
-            
-            conn.close()
-            
-            if result:
-                return {
-                    'id': result[0],
-                    'display_name': result[1],
-                    'unit': result[2],
-                    'format_type': result[3],
-                    'decimal_places': result[4],
-                    'is_percentage': bool(result[5])
-                }
-            return None
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(
+                    """
+                    SELECT id, display_name, unit, format_type, decimal_places, is_percentage
+                    FROM metrics
+                    WHERE service_id = ? AND name = ?
+                    """,
+                    (service_id, name)
+                )
+                result = cursor.fetchone()
+                
+                if result:
+                    return {
+                        'id': result[0],
+                        'display_name': result[1],
+                        'unit': result[2],
+                        'format_type': result[3],
+                        'decimal_places': result[4],
+                        'is_percentage': bool(result[5])
+                    }
+                return None
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_metric_info: {e}")
@@ -764,29 +891,27 @@ class MetadataStore:
             List of format rules as dictionaries
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                """
-                SELECT pattern, replacement, rule_type, priority
-                FROM format_rules
-                ORDER BY priority DESC
-                """
-            )
-            results = cursor.fetchall()
-            
-            conn.close()
-            
-            return [
-                {
-                    'pattern': row[0],
-                    'replacement': row[1],
-                    'rule_type': row[2],
-                    'priority': row[3]
-                }
-                for row in results
-            ]
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute(
+                    """
+                    SELECT pattern, replacement, rule_type, priority
+                    FROM format_rules
+                    ORDER BY priority DESC
+                    """
+                )
+                results = cursor.fetchall()
+                
+                return [
+                    {
+                        'pattern': row[0],
+                        'replacement': row[1],
+                        'rule_type': row[2],
+                        'priority': row[3]
+                    }
+                    for row in results
+                ]
             
         except sqlite3.Error as e:
             logger.error(f"Error in get_format_rules: {e}")

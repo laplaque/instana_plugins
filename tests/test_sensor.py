@@ -33,7 +33,8 @@ class TestSensors(unittest.TestCase):
         """Test M8PrcSvr sensor."""
         # Import the sensor module
         import m8prcsvr.sensor
-        from common import VERSION as EXPECTED_VERSION
+        from common.toml_utils import get_manifest_value
+        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(m8prcsvr.sensor.PROCESS_NAME, "M8PrcSvr")
@@ -44,7 +45,8 @@ class TestSensors(unittest.TestCase):
         """Test M8MulPrc sensor."""
         # Import the sensor module
         import m8mulprc.sensor
-        from common import VERSION as EXPECTED_VERSION
+        from common.toml_utils import get_manifest_value
+        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(m8mulprc.sensor.PROCESS_NAME, "M8MulPrc")
@@ -55,7 +57,8 @@ class TestSensors(unittest.TestCase):
         """Test MstrSvr sensor."""
         # Import the sensor module
         import mstrsvr.sensor
-        from common import VERSION as EXPECTED_VERSION
+        from common.toml_utils import get_manifest_value
+        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(mstrsvr.sensor.PROCESS_NAME, "MstrSvr")
@@ -66,7 +69,8 @@ class TestSensors(unittest.TestCase):
         """Test M8RefSvr sensor."""
         # Import the sensor module
         import m8refsvr.sensor
-        from common import VERSION as EXPECTED_VERSION
+        from common.toml_utils import get_manifest_value
+        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(m8refsvr.sensor.PROCESS_NAME, "M8RefSvr")
