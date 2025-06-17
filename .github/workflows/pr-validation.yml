@@ -4,6 +4,12 @@ on:
     branches: [main, master]  
     types: [opened, synchronize, reopened]
 
+# Explicitly define the permissions needed for the workflow
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write  # Required for creating commit statuses
+
 jobs:
   check-workflow-changes:
     name: Check Workflow Changes
