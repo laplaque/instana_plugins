@@ -24,6 +24,7 @@ try:
     METADATA_SCHEMA_VERSION = get_manifest_value('metadata.metadata_schema_version', '1.0')
 except ImportError:
     METADATA_SCHEMA_VERSION = "1.0"  # Fallback if import fails
+    logger.error("TOML utilities not available. Metric definitions cannot be loaded. Please ensure common/toml_utils.py exists and get_expanded_metrics is available.")
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,64 @@ class MetadataStore:
     ensuring consistent telemetry data across restarts and maintaining proper
     formatting of metric names and values.
     """
+    
+    def _build_metrics_query(self, operation_type, include_otel_type=True):
+        """
+        Build a parametrized SQL query for metrics table operations.
+        
+        Args:
+            operation_type: Either 'insert' or 'update'
+            include_otel_type: Whether to include otel_type column
+            
+        Returns:
+            Tuple of (sql_query, param_order) where param_order is the list
+            of parameter names in the order they should be provided
+        """
+        if operation_type == 'insert':
+            columns = ["id", "service_id", "name", "display_name", "unit", 
+                      "format_type", "decimal_places", "is_percentage", "is_counter"]
+            placeholders = ["?"] * len(columns)
+            param_order = ["id", "service_id", "name", "display_name", "unit", 
+                          "format_type", "decimal_places", "is_percentage", "is_counter"]
+            
+            if include_otel_type:
+                columns.append("otel_type")
+                placeholders.append("?")
+                param_order.append("otel_type")
+                
+            columns.extend(["first_seen", "last_seen"])
+            placeholders.extend(["?", "?"])
+            param_order.extend(["first_seen", "last_seen"])
+            
+            sql = f"""
+            INSERT INTO metrics 
+            ({', '.join(columns)})
+            VALUES ({', '.join(placeholders)})
+            """
+            
+            return sql, param_order
+        
+        elif operation_type == 'update':
+            set_clauses = ["display_name = ?", "unit = ?", "format_type = ?", 
+                          "decimal_places = ?", "is_percentage = ?"]
+            param_order = ["display_name", "unit", "format_type", 
+                          "decimal_places", "is_percentage"]
+            
+            if include_otel_type:
+                set_clauses.append("otel_type = ?")
+                param_order.append("otel_type")
+                
+            set_clauses.append("last_seen = ?")
+            param_order.append("last_seen")
+            param_order.append("id")  # For WHERE clause
+            
+            sql = f"""
+            UPDATE metrics 
+            SET {', '.join(set_clauses)}
+            WHERE id = ?
+            """
+            
+            return sql, param_order
     
     def sanitize_for_metrics(self, input_string: str) -> str:
         """
@@ -679,40 +738,40 @@ class MetadataStore:
                 
                 now = datetime.now().isoformat()
                 
+                # Determine if otel_type should be included based on schema
+                include_otel_type = self.metrics_columns and 'otel_type' in self.metrics_columns
+                
                 if result:
                     # Metric exists, update last_seen and other fields
                     metric_id, existing_display_name = result
                     
-                    # Use cached columns to check for otel_type field
-                    if self.metrics_columns and 'otel_type' in self.metrics_columns:
-                        # Update with otel_type field
-                        cursor.execute(
-                            """
-                            UPDATE metrics 
-                            SET display_name = ?, unit = ?, format_type = ?, 
-                                decimal_places = ?, is_percentage = ?, otel_type = ?, last_seen = ? 
-                            WHERE id = ?
-                            """,
-                            (display_name, unit, format_type, decimal_places, 
-                             is_percentage, otel_type, now, metric_id)
-                        )
-                    else:
-                        # Update without otel_type field (schema v1.0 fallback)
+                    # Build the appropriate SQL update query
+                    sql, param_order = self._build_metrics_query('update', include_otel_type)
+                    
+                    # Prepare parameters dictionary
+                    params = {
+                        'display_name': display_name,
+                        'unit': unit,
+                        'format_type': format_type,
+                        'decimal_places': decimal_places,
+                        'is_percentage': is_percentage,
+                        'otel_type': otel_type,
+                        'last_seen': now,
+                        'id': metric_id
+                    }
+                    
+                    # Extract parameters in the correct order
+                    param_values = [params[param] for param in param_order]
+                    
+                    # Execute the query
+                    cursor.execute(sql, param_values)
+                    
+                    # Log appropriate message based on schema
+                    if not include_otel_type:
                         if self.metrics_columns is None:
                             logger.warning("Metrics schema cache is not available, falling back to legacy update pattern")
                         elif 'otel_type' not in self.metrics_columns:
                             logger.debug(f"Schema inconsistency detected: 'otel_type' column not found in cached schema. Available columns: {sorted(self.metrics_columns)}")
-                        
-                        cursor.execute(
-                            """
-                            UPDATE metrics 
-                            SET display_name = ?, unit = ?, format_type = ?, 
-                                decimal_places = ?, is_percentage = ?, last_seen = ? 
-                            WHERE id = ?
-                            """,
-                            (display_name, unit, format_type, decimal_places, 
-                             is_percentage, now, metric_id)
-                        )
                     
                     conn.commit()
                     logger.debug(f"Using existing metric: {name} (ID: {metric_id})")
@@ -721,36 +780,37 @@ class MetadataStore:
                     # Metric doesn't exist, create new
                     metric_id = str(uuid.uuid4())
                     
-                    # Use cached columns to check for otel_type field
-                    if self.metrics_columns and 'otel_type' in self.metrics_columns:
-                        # Insert with otel_type field
-                        cursor.execute(
-                            """
-                            INSERT INTO metrics 
-                            (id, service_id, name, display_name, unit, format_type, 
-                             decimal_places, is_percentage, is_counter, otel_type, first_seen, last_seen)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (metric_id, service_id, name, display_name, unit, format_type,
-                             decimal_places, is_percentage, is_counter, otel_type, now, now)
-                        )
-                    else:
-                        # Insert without otel_type field (schema v1.0 fallback)
+                    # Build the appropriate SQL insert query
+                    sql, param_order = self._build_metrics_query('insert', include_otel_type)
+                    
+                    # Prepare parameters dictionary
+                    params = {
+                        'id': metric_id,
+                        'service_id': service_id,
+                        'name': name,
+                        'display_name': display_name,
+                        'unit': unit,
+                        'format_type': format_type,
+                        'decimal_places': decimal_places,
+                        'is_percentage': is_percentage,
+                        'is_counter': is_counter,
+                        'otel_type': otel_type,
+                        'first_seen': now,
+                        'last_seen': now
+                    }
+                    
+                    # Extract parameters in the correct order
+                    param_values = [params[param] for param in param_order]
+                    
+                    # Execute the query
+                    cursor.execute(sql, param_values)
+                    
+                    # Log appropriate message based on schema
+                    if not include_otel_type:
                         if self.metrics_columns is None:
                             logger.warning("Metrics schema cache is not available, falling back to legacy insert pattern")
                         elif 'otel_type' not in self.metrics_columns:
                             logger.debug(f"Schema inconsistency detected: 'otel_type' column not found in cached schema. Available columns: {sorted(self.metrics_columns)}")
-                        
-                        cursor.execute(
-                            """
-                            INSERT INTO metrics 
-                            (id, service_id, name, display_name, unit, format_type, 
-                             decimal_places, is_percentage, is_counter, first_seen, last_seen)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (metric_id, service_id, name, display_name, unit, format_type,
-                             decimal_places, is_percentage, is_counter, now, now)
-                        )
                     
                     conn.commit()
                     logger.info(f"Created new metric: {name} (ID: {metric_id}, Type: {otel_type})")

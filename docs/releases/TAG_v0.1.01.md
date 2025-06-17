@@ -20,16 +20,26 @@ Enhanced database connection management with centralized context managers and cr
 - **Integer Decimals**: Fixed integer values displaying with unnecessary decimal places
 - **Percentage Display**: Corrected percentage metrics to show proper decimal precision
 
+### Code Quality Improvements (New)
+- **Refactored Query Building**: Consolidated duplicate SQL query construction logic in `metadata_store.py`
+- **Error Handling Consistency**: Improved error handling pattern in OpenTelemetry connector
+- **Removed Redundancy**: Eliminated duplicate code in metric table operations
+- **Enhanced Documentation**: Added comprehensive comments for complex logic
+- **Schema Detection**: Improved handling of different database schema versions
+
 ### Changes Made
 - **Enhanced `common/metadata_store.py`**: 
   - Added centralized `_get_db_connection()` context manager method
   - Updated critical database methods: `_cache_metrics_schema()`, `_get_current_schema_version()`, `_set_schema_version()`, migration methods, and CRUD operations
   - Replaced manual connection/close patterns with context managers
+  - Implemented `_build_metrics_query()` helper method to eliminate duplicate SQL query building logic
   - Maintained all existing functionality while improving reliability
 - **Enhanced `common/otel_connector.py`**: 
   - Added `decimals` field reading from manifest.toml
   - Implemented proper formatting based on metric configuration
   - Fixed metric name cleaning to remove trailing braces
+  - Consolidated error handling logic for connection errors
+  - Added `_handle_connection_error()` method for consistent error management
 - **Documentation**: Created ADR-001 for architectural decision record
 - **Updated metric formatting logic**: Applied manifest-specified decimal places instead of hardcoded values
 - **Maintained backward compatibility**: Existing installations continue to work unchanged
@@ -52,6 +62,23 @@ Enhanced database connection management with centralized context managers and cr
       # Automatic cleanup
   ```
 
+**Query Building Refactoring:**
+- **Before**: Duplicate SQL query construction for insert and update operations with different column handling
+- **After**: Centralized query builder method that handles column differences based on schema version
+  ```python
+  def _build_metrics_query(self, operation_type, include_otel_type=True):
+      # Consolidated logic for building parametrized SQL queries
+      # Returns appropriate SQL based on operation type and schema
+  ```
+
+**Error Handling:**
+- **Before**: Inconsistent error handling patterns across different components
+- **After**: Consolidated error handling with dedicated helper methods
+  ```python
+  def _handle_connection_error(self, error, component_name):
+      # Centralized error handling logic for connection issues
+  ```
+
 **Metric Display:**
 - **Before**: Metrics displayed as `cpu_usage{}` with `42.678912` (excessive decimals)
 - **After**: Metrics display as `cpu_usage` with `42.68` (proper formatting)
@@ -70,6 +97,7 @@ Enhanced database connection management with centralized context managers and cr
 - ✅ Confirmed proper decimal handling for all metric types (Gauge, Counter, UpDownCounter)
 - ✅ Validated metric name cleaning functionality
 - ✅ Exception safety verified with database operations
+- ✅ Query building tested with different schema versions
 
 ### Architecture Decision Record
 - **ADR-001**: Created comprehensive architectural decision record documenting the database connection management changes

@@ -391,8 +391,7 @@ class InstanaOTelConnector:
         try:
             # Load metric definitions from TOML with pattern expansion
             if not get_expanded_metrics:
-                logger.error("TOML utilities not available. Metric definitions cannot be loaded.")
-                logger.error("Please ensure common/toml_utils.py exists and get_expanded_metrics is available.")
+                logger.error("TOML utilities not available. Metric definitions cannot be loaded. Please ensure common/toml_utils.py exists and get_expanded_metrics is available.")
                 raise RuntimeError("TOML utilities required for metric definitions are not available")
             
             metric_definitions = get_expanded_metrics()
