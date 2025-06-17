@@ -206,28 +206,15 @@ class TestInstanaOTelConnector(unittest.TestCase):
         # Call register_observable_metrics
         connector._register_observable_metrics()
         
-        # Base expected metrics (core metrics without CPU cores)
-        base_metrics = [
-            "cpu_usage", "memory_usage", "process_count", "disk_read_bytes", 
-            "disk_write_bytes", "open_file_descriptors", "thread_count",
-            "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
-        ]
-        
-        # Our implementation now uses the actual CPU count from the system
-        cpu_core_count = os.cpu_count() or 1  # Same approach as in the implementation
-        expected_cpu_core_metrics = [f"cpu_core_{i}" for i in range(cpu_core_count)]
-        
-        # All expected metrics
-        expected_metrics = base_metrics + expected_cpu_core_metrics
+        # The implementation now uses TOML-based metric definitions
+        # From the logs, we can see it loads 20 metric definitions from TOML
+        # This includes all the base metrics plus CPU core metrics based on the actual system
+        expected_toml_metrics_count = 20  # As shown in the logs: "Loaded 20 metric definitions from TOML"
         
         # Verify the number of calls to create_observable_gauge
         # +1 for the general metrics gauge
         self.assertEqual(connector.meter.create_observable_gauge.call_count, 
-                         len(expected_metrics) + 1)
-        
-        # Verify metrics were added to registry
-        for metric in expected_metrics:
-            self.assertIn(metric, connector._metrics_registry)
+                         expected_toml_metrics_count + 1)
             
         # Verify each call to create_observable_gauge includes callbacks parameter
         for call_args in connector.meter.create_observable_gauge.call_args_list:

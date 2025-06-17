@@ -326,7 +326,7 @@ If metrics aren't appearing in Instana:
 
 ## Release Notes
 
-For a detailed history of changes and improvements, see the [Release Notes](../RELEASE_NOTES.md).
+For a detailed history of changes and improvements, see the [Release Notes](../docs/releases/RELEASE_NOTES.md).
 
 ## License
 

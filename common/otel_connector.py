@@ -46,6 +46,13 @@ except ImportError as e:
     logger.error("Please ensure common/metadata_store.py exists and is importable.")
     sys.exit(1)
 
+# Import TOML utilities for metric definitions
+try:
+    from common.toml_utils import get_expanded_metrics
+except ImportError as e:
+    logger.error(f"TOML utilities not found: {e}")
+    get_expanded_metrics = None
+
 # OpenTelemetry imports
 try:
     from opentelemetry import trace
@@ -164,7 +171,7 @@ class InstanaOTelConnector:
         
         # Store OpenTelemetry standard resource attributes
         self.attributes = {
-            "service.name": service_name,
+            "service.name": getattr(self, 'display_name', service_name),  # Use self.display_name with fallback to self.service_name
             "service.namespace": service_namespace,
             "service.instance.id": self.service_id,  # OpenTelemetry standard attribute
             "host.id": self.host_id,                 # OpenTelemetry standard attribute  
@@ -346,7 +353,7 @@ class InstanaOTelConnector:
             metric_name: The name of the metric this callback will observe
             is_percentage: Whether the metric is a percentage
             is_counter: Whether the metric is a counter
-            decimal_places: Number of decimal places to round to
+            decimal_places: Number of decimal places to round to (from manifest.toml)
             display_name: Optional display name for logging
 
         Returns:
@@ -355,16 +362,15 @@ class InstanaOTelConnector:
         def callback(options):
             try:
                 if metric_name in self._metrics_state:
-                    value = self._metrics_state[metric_name]
+                    raw_value = self._metrics_state[metric_name]
                     
-                    # Format the value if formatting parameters are provided
-                    if any([is_percentage, is_counter, decimal_places != 2]):
-                        value = self._metadata_store.format_metric_value(
-                            value, 
-                            is_percentage=is_percentage, 
-                            is_counter=is_counter,
-                            decimal_places=decimal_places
-                        )
+                    # Format the value according to manifest.toml specifications
+                    if is_counter or decimal_places == 0:
+                        # For counters and metrics with 0 decimals, show as integers
+                        value = int(float(raw_value))
+                    else:
+                        # For other metrics, use the decimal places from manifest.toml
+                        value = round(float(raw_value), decimal_places)
                     
                     # Yield an Observation object as required by OpenTelemetry API
                     yield Observation(value)
@@ -377,74 +383,50 @@ class InstanaOTelConnector:
         return callback
     
     def _register_observable_metrics(self):
-        """Register individual observable metrics with OpenTelemetry."""
+        """Register individual observable metrics with OpenTelemetry using TOML-based definitions."""
         if not hasattr(self, 'meter') or not self.meter:
             logger.error("Cannot register metrics: Meter not initialized")
             return
             
         try:
-            # Define the metrics we expect to collect
-            expected_metrics = [
-                "cpu_usage", "memory_usage", "process_count", "disk_read_bytes", 
-                "disk_write_bytes", "open_file_descriptors", "thread_count",
-                "voluntary_ctx_switches", "nonvoluntary_ctx_switches"
-            ]
+            # Load metric definitions from TOML with pattern expansion
+            if not get_expanded_metrics:
+                logger.error("TOML utilities not available. Metric definitions cannot be loaded. Please ensure common/toml_utils.py exists and get_expanded_metrics is available.")
+                raise RuntimeError("TOML utilities required for metric definitions are not available")
             
-            # Compute the CPU core count once and reuse it throughout the function
-            cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
+            metric_definitions = get_expanded_metrics()
+            logger.info(f"Loaded {len(metric_definitions)} metric definitions from TOML")
             
-            # Add CPU core metrics to expected metrics
-            for i in range(cpu_core_count):  # Support up to the actual number of cores
-                expected_metrics.append(f"cpu_core_{i}")
+            # Build lookup dictionaries from TOML definitions
+            expected_metrics = []
+            percentage_metrics = {}
+            counter_metrics = {}
+            otel_type_map = {}
+            metric_descriptions = {}
+            decimal_places_map = {}
             
-            # Define which metrics should be displayed as percentages
-            percentage_metrics = {
-                "cpu_usage": True,
-                "memory_usage": True
-            }
+            for metric_def in metric_definitions:
+                name = metric_def['name']
+                expected_metrics.append(name)
+                percentage_metrics[name] = metric_def.get('is_percentage', False)
+                counter_metrics[name] = metric_def.get('is_counter', False)
+                otel_type_map[name] = metric_def.get('otel_type', 'Gauge')
+                metric_descriptions[name] = metric_def.get('description', f"Metric for {name}")
+                decimal_places_map[name] = metric_def.get('decimals', 2)
             
-            # Define which metrics are counters (should be displayed as integers)
-            counter_metrics = {
-                "process_count": True,
-                "disk_read_bytes": True,
-                "disk_write_bytes": True,
-                "open_file_descriptors": True,
-                "thread_count": True,
-                "voluntary_ctx_switches": True,
-                "nonvoluntary_ctx_switches": True,
-                "max_threads_per_process": True,
-                "min_threads_per_process": True
-            }
-            
-            # Add CPU core metrics to percentage metrics - reuse the same CPU count from above
-            for i in range(cpu_core_count):  # Use actual CPU count instead of hardcoded value
-                percentage_metrics[f"cpu_core_{i}"] = True
-            
-            # Add any metric-specific descriptions
-            metric_descriptions = {
-                "cpu_usage": "CPU usage as percentage",
-                "memory_usage": "Memory usage as percentage",
-                "process_count": "Number of processes",
-                "disk_read_bytes": "Bytes read from disk",
-                "disk_write_bytes": "Bytes written to disk",
-                "open_file_descriptors": "Number of open file descriptors",
-                "thread_count": "Number of threads",
-                "voluntary_ctx_switches": "Number of voluntary context switches",
-                "nonvoluntary_ctx_switches": "Number of non-voluntary context switches"
-            }
-            
-            # In newer OpenTelemetry versions, we need to use callbacks differently
+            # Register individual observable metrics using TOML-based configuration
             for metric_name in expected_metrics:
-                # Get metric ID and display name from metadata store
-                is_percentage = percentage_metrics.get(metric_name, False)
-                
                 try:
-                    # Check if this metric is a counter
+                    # Get configuration from TOML definitions
+                    is_percentage = percentage_metrics.get(metric_name, False)
                     is_counter = counter_metrics.get(metric_name, False)
+                    otel_type = otel_type_map.get(metric_name, 'Gauge')
+                    description = metric_descriptions.get(metric_name, f"Metric for {metric_name}")
                     
-                    # Set decimal places to 0 for counters
-                    decimal_places = 0 if is_counter else 2
+                    # Get decimal places from manifest.toml
+                    decimal_places = decimal_places_map.get(metric_name, 2)
                     
+                    # Get metric ID and display name from metadata store (now with otel_type)
                     metric_id, display_name = self._metadata_store.get_or_create_metric(
                         service_id=self.service_id,
                         name=metric_name,
@@ -452,20 +434,17 @@ class InstanaOTelConnector:
                         format_type="counter" if is_counter else ("percentage" if is_percentage else "number"),
                         decimal_places=decimal_places,
                         is_percentage=is_percentage,
-                        is_counter=is_counter
+                        is_counter=is_counter,
+                        otel_type=otel_type
                     )
                     
-                    # Use specific description if available, otherwise use generic
-                    description = metric_descriptions.get(
-                        metric_name, f"Metric for {display_name or metric_name}"
-                    )
+                    # Create the observable metric with proper naming (without trailing {})
+                    simple_name = self._metadata_store.get_simple_metric_name(metric_name)
                     
-                    # Create the observable gauge with the callback and proper naming
-                    # Use the simple name from metadata store for better display in Instana
                     gauge = self.meter.create_observable_gauge(
-                        name=self._metadata_store.get_simple_metric_name(metric_name),
+                        name=simple_name,
                         description=description,
-                        unit="%" if is_percentage else "1",
+                        unit="%" if is_percentage else "",
                         callbacks=[self._create_metric_callback(
                             metric_name, 
                             is_percentage, 
@@ -474,13 +453,14 @@ class InstanaOTelConnector:
                             display_name
                         )]
                     )
+                    
+                    # Add to registry for tracking
+                    self._metrics_registry.add(metric_name)
+                    logger.debug(f"Registered observable metric: {metric_name} -> {simple_name} ({otel_type})")
+                    
                 except Exception as e:
                     logger.error(f"Error registering metric {metric_name}: {e}")
                     continue
-                
-                # Add to registry for tracking
-                self._metrics_registry.add(metric_name)
-                logger.debug(f"Registered observable metric: {metric_name}")
                 
             # Also create a general callback for any metrics not in the expected list
             # This allows handling of dynamic or unexpected metrics

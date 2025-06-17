@@ -1,6 +1,6 @@
 [metadata]
-version = "0.1.00"
-metadata_schema_version = "1.0"
+version = "0.1.01"
+metadata_schema_version = "2.0"
 generated_at = "2025-06-16T16:53:00.000000Z"
 framework_name = "OpenTelemetry Process Monitor"
 python_version_min = "3.6"
@@ -75,3 +75,125 @@ sha256 = "7d2fd55d16c15b7728292bc645a8f1001f1b37ee57975e6301cdc1c542ffd679"
 size = 1075
 description = "Shell script for version extraction from Python modules"
 required = true
+
+# Default metric definitions for OpenTelemetry process monitoring
+[[default_metrics]]
+name = "cpu_usage"
+otel_type = "Gauge"
+unit = "%"
+decimals = 2
+is_percentage = true
+is_counter = false
+description = "Overall CPU usage percentage"
+
+[[default_metrics]]
+name = "memory_usage"
+otel_type = "Gauge"
+unit = "%"
+decimals = 2
+is_percentage = true
+is_counter = false
+description = "Memory usage percentage"
+
+[[default_metrics]]
+name = "process_count"
+otel_type = "UpDownCounter"
+unit = "processes"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Current number of processes"
+
+[[default_metrics]]
+name = "thread_count"
+otel_type = "UpDownCounter"
+unit = "threads"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Current total number of threads"
+
+[[default_metrics]]
+name = "disk_read_bytes"
+otel_type = "Counter"
+unit = "bytes"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Total bytes read from disk"
+
+[[default_metrics]]
+name = "disk_write_bytes"
+otel_type = "Counter"
+unit = "bytes"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Total bytes written to disk"
+
+[[default_metrics]]
+name = "open_file_descriptors"
+otel_type = "UpDownCounter"
+unit = "descriptors"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Current number of open file descriptors"
+
+[[default_metrics]]
+name = "voluntary_ctx_switches"
+otel_type = "Counter"
+unit = "switches"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Total voluntary context switches"
+
+[[default_metrics]]
+name = "nonvoluntary_ctx_switches"
+otel_type = "Counter"
+unit = "switches"
+decimals = 0
+is_percentage = false
+is_counter = true
+description = "Total non-voluntary context switches"
+
+[[default_metrics]]
+name = "avg_threads_per_process"
+otel_type = "Gauge"
+unit = "threads"
+decimals = 0
+is_percentage = false
+is_counter = false
+description = "Average threads per process"
+
+[[default_metrics]]
+name = "max_threads_per_process"
+otel_type = "Gauge"
+unit = "threads"
+decimals = 0
+is_percentage = false
+is_counter = false
+description = "Maximum threads per process"
+
+[[default_metrics]]
+name = "min_threads_per_process"
+otel_type = "Gauge"
+unit = "threads"
+decimals = 0
+is_percentage = false
+is_counter = false
+description = "Minimum threads per process"
+
+# Pattern-based metrics for dynamic system resources
+[[default_metrics]]
+name = "cpu_core_{index}"
+otel_type = "Gauge"
+unit = "%"
+decimals = 2
+is_percentage = true
+is_counter = false
+description = "CPU usage for core {index}"
+pattern_type = "indexed"
+pattern_source = "cpu_count"
+pattern_range = "0-auto"

@@ -18,8 +18,11 @@ from unittest.mock import patch
 # Add the parent directory to the path to import the common modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from common import VERSION
+from common.version import get_version
 from common.metadata_store import MetadataStore
+
+# Get the version from the new version system
+VERSION = get_version()
 
 class TestMetadataStore(unittest.TestCase):
     """Test cases for the MetadataStore class"""
@@ -61,7 +64,9 @@ class TestMetadataStore(unittest.TestCase):
         # Get the service info and verify details
         service_info = self.store.get_service_info(service_id)
         self.assertIsNotNone(service_info)
-        self.assertEqual(service_name, service_info['full_name'])
+        # The service name gets sanitized (dots replaced with underscores) for database storage
+        expected_sanitized_name = service_name.replace('.', '_')
+        self.assertEqual(expected_sanitized_name, service_info['full_name'])
         self.assertEqual(display_name, service_info['display_name'])
         self.assertEqual(VERSION, service_info['version'])
         self.assertEqual(description, service_info['description'])

@@ -10,7 +10,7 @@ Centralized TOML parsing with comprehensive error handling.
 """
 import os
 import sys
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, List
 
 def load_toml_file(file_path: str) -> Optional[Dict[str, Any]]:
     """
@@ -153,3 +153,72 @@ def get_manifest_metadata() -> Dict[str, Any]:
         'python_version_min': '3.6',
         'maintainer': 'laplaque/instana_plugins Contributors'
     })
+
+def get_default_metrics() -> List[Dict[str, Any]]:
+    """Get default metric definitions from manifest.toml."""
+    return get_manifest_value('default_metrics', [])
+
+def expand_metric_patterns(metric_definitions: List[Dict]) -> List[Dict]:
+    """
+    Expand pattern-based metrics using template with range approach.
+    
+    Supports:
+    - pattern_type: "indexed" 
+    - pattern_source: "cpu_count", "disk_count", etc.
+    - pattern_range: "0-auto", "1-4", etc.
+    """
+    import os
+    expanded_metrics = []
+    
+    for metric_def in metric_definitions.copy():
+        if 'pattern_type' in metric_def:
+            pattern_type = metric_def['pattern_type']
+            
+            if pattern_type == 'indexed':
+                source = metric_def['pattern_source']
+                range_spec = metric_def['pattern_range']
+                
+                # Determine count based on source
+                if source == 'cpu_count':
+                    max_count = os.cpu_count() or 1
+                # Future: elif source == 'disk_count': ...
+                else:
+                    logger.warning(f"Unsupported pattern_source '{source}', defaulting to max_count = 1.")
+                    max_count = 1  # fallback
+                
+                # Parse range specification
+                start_idx, end_idx = _parse_range(range_spec, max_count)
+                
+                # Generate metrics for range
+                for i in range(start_idx, end_idx):
+                    expanded_metric = metric_def.copy()
+                    expanded_metric['name'] = metric_def['name'].replace('{index}', str(i))
+                    expanded_metric['description'] = metric_def['description'].replace('{index}', str(i))
+                    
+                    # Remove pattern fields from expanded metric
+                    for key in ['pattern_type', 'pattern_source', 'pattern_range']:
+                        expanded_metric.pop(key, None)
+                    
+                    expanded_metrics.append(expanded_metric)
+        else:
+            # Static metric, add as-is
+            expanded_metrics.append(metric_def)
+    
+    return expanded_metrics
+
+def _parse_range(range_spec: str, max_count: int) -> Tuple[int, int]:
+    """Parse range specification like '0-auto' or '1-4'."""
+    parts = range_spec.split('-')
+    start = int(parts[0])
+    
+    if parts[1] == 'auto':
+        end = max_count
+    else:
+        end = int(parts[1]) + 1  # +1 for inclusive range
+        
+    return start, end
+
+def get_expanded_metrics() -> List[Dict[str, Any]]:
+    """Get expanded metric definitions with patterns resolved."""
+    base_metrics = get_default_metrics()
+    return expand_metric_patterns(base_metrics)
