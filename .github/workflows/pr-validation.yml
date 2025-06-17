@@ -55,42 +55,58 @@ jobs:
       - name: Check TAG file presence and format
         id: check-tag
         run: |
-          # Check for TAG files in both root and docs/releases directories
-          ROOT_TAG_FILES=$(find . -maxdepth 1 -name "TAG_v*.md" | wc -l)
-          DOCS_TAG_FILES=$(find ./docs/releases -maxdepth 1 -name "TAG_v*.md" | wc -l)
-          TAG_FILES=$((ROOT_TAG_FILES + DOCS_TAG_FILES))
-          
-          if [ $TAG_FILES -eq 0 ]; then
-            echo "❌ PR not ready to merge: Missing TAG_vn.n.nn.md file"
-            echo "ℹ️  A TAG file is required for merging to master branch"
-            exit 1
-          elif [ $ROOT_TAG_FILES -gt 1 ] || [ $DOCS_TAG_FILES -gt 1 ]; then
-            echo "❌ PR not ready to merge: Multiple TAG files found in the same directory"
-            echo "ℹ️  Only one TAG file should be present per directory per release"
-            exit 1
+          # Get the version from manifest.toml
+          if [ -f "common/manifest.toml" ]; then
+            MANIFEST_VERSION=$(grep '^version = ' common/manifest.toml | sed 's/version = "\(.*\)"/\1/')
+            echo "📋 Manifest version: v$MANIFEST_VERSION"
           else
-            # Find the TAG file from either location
-            if [ $ROOT_TAG_FILES -eq 1 ]; then
-              TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md")
-            else
-              TAG_FILE=$(find ./docs/releases -maxdepth 1 -name "TAG_v*.md")
-            fi
-            echo "✅ Found $TAG_FILE"
-            
-            # Extract version from filename
-            NEW_VERSION=$(basename "$TAG_FILE" .md | sed 's/TAG_v//')
-            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-            echo "tag_file=$TAG_FILE" >> $GITHUB_OUTPUT
-            
-            # Validate version format (major.minor.patch)
-            if ! [[ $NEW_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "❌ Invalid TAG file format: $TAG_FILE"
-              echo "ℹ️  Expected format: TAG_v{major}.{minor}.{patch}.md (e.g., TAG_v0.1.01.md)"
-              exit 1
-            fi
-            
-            echo "✅ TAG file format valid: $TAG_FILE"
+            echo "❌ PR not ready to merge: Missing common/manifest.toml file"
+            exit 1
           fi
+          
+          # Look for matching TAG file in root directory
+          ROOT_TAG_FILE=$(find . -maxdepth 1 -name "TAG_v${MANIFEST_VERSION}.md" | head -n 1)
+          
+          # Look for matching TAG file in docs/releases directory
+          DOCS_TAG_FILE=$(find ./docs/releases -maxdepth 1 -name "TAG_v${MANIFEST_VERSION}.md" | head -n 1)
+          
+          # Determine which TAG file to use
+          if [ -n "$ROOT_TAG_FILE" ]; then
+            TAG_FILE="$ROOT_TAG_FILE"
+            echo "✅ Found matching TAG file in root: $TAG_FILE"
+          elif [ -n "$DOCS_TAG_FILE" ]; then
+            TAG_FILE="$DOCS_TAG_FILE"
+            echo "✅ Found matching TAG file in docs/releases: $TAG_FILE"
+          else
+            echo "❌ PR not ready to merge: No TAG file found matching manifest version v$MANIFEST_VERSION"
+            echo "ℹ️  Please ensure a TAG_v$MANIFEST_VERSION.md file exists in root or docs/releases"
+            exit 1
+          fi
+          
+          # Extract version from filename (should match manifest version)
+          TAG_VERSION=$(basename "$TAG_FILE" .md | sed 's/TAG_v//')
+          # Set outputs for other steps
+          echo "new_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          echo "tag_file=$TAG_FILE" >> $GITHUB_OUTPUT
+          
+          # Validate version format (major.minor.patch)
+          if ! [[ $TAG_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid TAG file format: $TAG_FILE"
+            echo "ℹ️  Expected format: TAG_v{major}.{minor}.{patch}.md (e.g., TAG_v0.1.01.md)"
+            exit 1
+          fi
+          
+          echo "✅ TAG file format valid: $TAG_FILE (v$TAG_VERSION)"
+          
+          # Verify TAG version matches manifest version
+          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "❌ Version mismatch between TAG file and manifest.toml:"
+            echo "   TAG file: $TAG_FILE (v$TAG_VERSION)"
+            echo "   manifest.toml: v$MANIFEST_VERSION"
+            exit 1
+          fi
+          
+          echo "✅ TAG version matches manifest.toml version: v$TAG_VERSION"
 
       - name: Validate version increment
         run: |
@@ -184,18 +200,36 @@ jobs:
           NEW_VERSION="${{ steps.check-tag.outputs.new_version }}"
           TAG_FILE="${{ steps.check-tag.outputs.tag_file }}"
           
-          # Check if RELEASE_NOTES.md contains the new version
+          # Check both the root RELEASE_NOTES.md and docs/releases/RELEASE_NOTES.md
+          RELEASE_NOTES_FOUND=false
+          RELEASE_NOTES_CONTAINS_VERSION=false
+          
+          # Check root RELEASE_NOTES.md if it exists
           if [ -f "RELEASE_NOTES.md" ]; then
-            if ! grep -q "Version $NEW_VERSION" "RELEASE_NOTES.md"; then
-              echo "❌ Version not found in RELEASE_NOTES.md:"
-              echo "   TAG file: $TAG_FILE (v$NEW_VERSION)"
-              echo "ℹ️  Please add 'Version $NEW_VERSION' entry to RELEASE_NOTES.md"
-              exit 1
-            else
-              echo "✅ RELEASE_NOTES.md contains: Version $NEW_VERSION"
+            RELEASE_NOTES_FOUND=true
+            if grep -q "Version $NEW_VERSION" "RELEASE_NOTES.md"; then
+              RELEASE_NOTES_CONTAINS_VERSION=true
+              echo "✅ Root RELEASE_NOTES.md contains: Version $NEW_VERSION"
             fi
-          else
-            echo "⚠️  Warning: RELEASE_NOTES.md not found"
+          fi
+          
+          # Check docs/releases/RELEASE_NOTES.md if it exists
+          if [ -f "docs/releases/RELEASE_NOTES.md" ]; then
+            RELEASE_NOTES_FOUND=true
+            if grep -q "Version $NEW_VERSION" "docs/releases/RELEASE_NOTES.md"; then
+              RELEASE_NOTES_CONTAINS_VERSION=true
+              echo "✅ docs/releases/RELEASE_NOTES.md contains: Version $NEW_VERSION"
+            fi
+          fi
+          
+          # Report errors if necessary
+          if [ "$RELEASE_NOTES_FOUND" = false ]; then
+            echo "⚠️  Warning: No RELEASE_NOTES.md found in root or docs/releases"
+          elif [ "$RELEASE_NOTES_CONTAINS_VERSION" = false ]; then
+            echo "❌ Version not found in any RELEASE_NOTES.md:"
+            echo "   TAG file: $TAG_FILE (v$NEW_VERSION)"
+            echo "ℹ️  Please add 'Version $NEW_VERSION' entry to RELEASE_NOTES.md"
+            exit 1
           fi
 
       - name: PR ready summary
