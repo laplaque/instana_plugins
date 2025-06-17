@@ -40,6 +40,24 @@ jobs:
           else
             echo "📋 Code changes detected - TAG validation required"
           fi
+          
+      - name: Report workflow check status
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { sha } = context.payload.pull_request.head;
+            
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha,
+              state: '${{ job.status }}' === 'success' ? 'success' : 'failure',
+              target_url: 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+              description: '${{ job.status }}' === 'success' ? 'Check passed' : 'Check failed',
+              context: 'check-workflow-changes'
+            });
 
   validate-pr-ready:
     name: Validate PR Ready for Master
@@ -253,3 +271,21 @@ jobs:
           echo "✅ File consistency verified"
           echo ""
           echo "🚀 PR is ready to merge to master!"
+          
+      - name: Report validation status
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { sha } = context.payload.pull_request.head;
+            
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha,
+              state: '${{ job.status }}' === 'success' ? 'success' : 'failure',
+              target_url: 'https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+              description: '${{ job.status }}' === 'success' ? 'Validation passed' : 'Validation failed',
+              context: 'validate-pr-ready'
+            });
