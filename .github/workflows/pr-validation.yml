@@ -113,55 +113,65 @@ jobs:
           NEW_VERSION="${{ steps.check-tag.outputs.new_version }}"
           echo "🔍 Checking version increment for: v$NEW_VERSION"
           
-          # Get all existing TAG files from repository history
-          ALL_TAG_FILES=$(git ls-files | grep -E "^(TAG_v.*\.md|docs/releases/TAG_v.*\.md)$" || echo "")
+          # Get the base branch (target of the PR)
+          BASE_BRANCH="${{ github.base_ref }}"
+          echo "📋 Base branch: $BASE_BRANCH"
           
-          if [ -z "$ALL_TAG_FILES" ]; then
-            echo "✅ No previous TAG files found. This is the first release: v$NEW_VERSION"
-            exit 0
+          # Fetch the base branch
+          git fetch origin $BASE_BRANCH
+          
+          # Get the manifest version from the base branch if available
+          BASE_VERSION=""
+          if git ls-tree -r origin/$BASE_BRANCH --name-only | grep -q "^common/manifest.toml$"; then
+            # Extract version from manifest.toml in base branch
+            BASE_MANIFEST_CONTENT=$(git show origin/$BASE_BRANCH:common/manifest.toml)
+            BASE_VERSION=$(echo "$BASE_MANIFEST_CONTENT" | grep '^version = ' | sed 's/version = "\(.*\)"/\1/')
+            echo "📊 Base manifest version: v$BASE_VERSION"
           fi
           
-          # Extract versions from all existing TAG files
-          EXISTING_VERSIONS=""
-          for tag_file in $ALL_TAG_FILES; do
-            version=$(basename "$tag_file" .md | sed 's/TAG_v//')
-            # Validate existing version format
-            if [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              EXISTING_VERSIONS="$EXISTING_VERSIONS $version"
+          # If no manifest version found, try to find highest TAG file version
+          if [ -z "$BASE_VERSION" ]; then
+            echo "⚠️ No manifest.toml found in $BASE_BRANCH, looking for TAG files..."
+            
+            # Find all TAG files in base branch (both root and docs/releases)
+            BASE_TAG_FILES=$(git ls-tree -r origin/$BASE_BRANCH --name-only | grep -E "^(TAG_v.*\.md|docs/releases/TAG_v.*\.md)$" || echo "")
+            
+            # Use sort and awk to extract highest version number directly
+            if [ -n "$BASE_TAG_FILES" ]; then
+              # Extract versions, sort them, and get the highest one
+              BASE_VERSION=$(echo "$BASE_TAG_FILES" | sed -E 's/^.*TAG_v([0-9]+\.[0-9]+\.[0-9]+)\.md$/\1/' | sort -V | tail -n 1)
+              echo "📊 Highest TAG version in $BASE_BRANCH: v$BASE_VERSION"
             fi
-          done
+          fi
           
-          if [ -z "$EXISTING_VERSIONS" ]; then
-            echo "✅ No valid previous versions found. This is the first release: v$NEW_VERSION"
+          # If still no version found, this is the first release
+          if [ -z "$BASE_VERSION" ]; then
+            echo "✅ No previous versions found in $BASE_BRANCH. This is the first release: v$NEW_VERSION"
             exit 0
           fi
           
-          # Find the highest existing version
-          HIGHEST_VERSION=$(echo "$EXISTING_VERSIONS" | tr ' ' '\n' | sort -V | tail -n 1)
-          echo "📊 Highest existing version: v$HIGHEST_VERSION"
-          echo "🆕 New version: v$NEW_VERSION"
+          echo "🆕 New version in PR: v$NEW_VERSION"
           
           # Compare versions using sort -V (version sort)
-          if [ "$(printf '%s\n' "$HIGHEST_VERSION" "$NEW_VERSION" | sort -V | head -n1)" = "$NEW_VERSION" ]; then
-            if [ "$HIGHEST_VERSION" = "$NEW_VERSION" ]; then
-              echo "❌ Version conflict: v$NEW_VERSION already exists"
+          if [ "$(printf '%s\n' "$BASE_VERSION" "$NEW_VERSION" | sort -V | head -n1)" = "$NEW_VERSION" ]; then
+            if [ "$BASE_VERSION" = "$NEW_VERSION" ]; then
+              echo "❌ Version conflict: v$NEW_VERSION already exists in $BASE_BRANCH"
               echo "ℹ️  Please increment to a higher version"
-              echo "📋 Existing versions: $(echo $EXISTING_VERSIONS | tr ' ' '\n' | sort -V | tr '\n' ' ')"
               exit 1
             else
-              echo "❌ Version downgrade: v$NEW_VERSION is lower than v$HIGHEST_VERSION"
-              echo "ℹ️  New version must be higher than the current highest version"
+              echo "❌ Version downgrade: v$NEW_VERSION is lower than v$BASE_VERSION in $BASE_BRANCH"
+              echo "ℹ️  New version must be higher than the current base version"
               echo "📋 Suggested versions:"
-              echo "   - Patch: v$(echo $HIGHEST_VERSION | awk -F. '{print $1"."$2"."($3+1)}')"
-              echo "   - Minor: v$(echo $HIGHEST_VERSION | awk -F. '{print $1"."($2+1)".0"}')"  
-              echo "   - Major: v$(echo $HIGHEST_VERSION | awk -F. '{print ($1+1)".0.0"}')"
+              echo "   - Patch: v$(echo $BASE_VERSION | awk -F. '{print $1"."$2"."($3+1)}')"
+              echo "   - Minor: v$(echo $BASE_VERSION | awk -F. '{print $1"."($2+1)".0"}')"  
+              echo "   - Major: v$(echo $BASE_VERSION | awk -F. '{print ($1+1)".0.0"}')"
               exit 1
             fi
           else
-            echo "✅ Version increment valid: v$HIGHEST_VERSION → v$NEW_VERSION"
+            echo "✅ Version increment valid: v$BASE_VERSION → v$NEW_VERSION"
             
             # Determine increment type
-            IFS='.' read -r old_major old_minor old_patch <<< "$HIGHEST_VERSION"
+            IFS='.' read -r old_major old_minor old_patch <<< "$BASE_VERSION"
             IFS='.' read -r new_major new_minor new_patch <<< "$NEW_VERSION"
             
             if [ $new_major -gt $old_major ]; then
