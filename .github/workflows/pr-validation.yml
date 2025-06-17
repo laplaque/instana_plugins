@@ -55,17 +55,26 @@ jobs:
       - name: Check TAG file presence and format
         id: check-tag
         run: |
-          TAG_FILES=$(find . -maxdepth 1 -name "TAG_v*.md" | wc -l)
+          # Check for TAG files in both root and docs/releases directories
+          ROOT_TAG_FILES=$(find . -maxdepth 1 -name "TAG_v*.md" | wc -l)
+          DOCS_TAG_FILES=$(find ./docs/releases -maxdepth 1 -name "TAG_v*.md" | wc -l)
+          TAG_FILES=$((ROOT_TAG_FILES + DOCS_TAG_FILES))
+          
           if [ $TAG_FILES -eq 0 ]; then
             echo "❌ PR not ready to merge: Missing TAG_vn.n.nn.md file"
             echo "ℹ️  A TAG file is required for merging to master branch"
             exit 1
-          elif [ $TAG_FILES -gt 1 ]; then
-            echo "❌ PR not ready to merge: Multiple TAG files found"
-            echo "ℹ️  Only one TAG file should be present per release"
+          elif [ $ROOT_TAG_FILES -gt 1 ] || [ $DOCS_TAG_FILES -gt 1 ]; then
+            echo "❌ PR not ready to merge: Multiple TAG files found in the same directory"
+            echo "ℹ️  Only one TAG file should be present per directory per release"
             exit 1
           else
-            TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md")
+            # Find the TAG file from either location
+            if [ $ROOT_TAG_FILES -eq 1 ]; then
+              TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md")
+            else
+              TAG_FILE=$(find ./docs/releases -maxdepth 1 -name "TAG_v*.md")
+            fi
             echo "✅ Found $TAG_FILE"
             
             # Extract version from filename
@@ -89,7 +98,7 @@ jobs:
           echo "🔍 Checking version increment for: v$NEW_VERSION"
           
           # Get all existing TAG files from repository history
-          ALL_TAG_FILES=$(git ls-files | grep "^TAG_v.*\.md$" || echo "")
+          ALL_TAG_FILES=$(git ls-files | grep -E "^(TAG_v.*\.md|docs/releases/TAG_v.*\.md)$" || echo "")
           
           if [ -z "$ALL_TAG_FILES" ]; then
             echo "✅ No previous TAG files found. This is the first release: v$NEW_VERSION"
