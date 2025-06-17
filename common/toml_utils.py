@@ -183,6 +183,8 @@ def expand_metric_patterns(metric_definitions: List[Dict]) -> List[Dict]:
                     max_count = os.cpu_count() or 1
                 # Future: elif source == 'disk_count': ...
                 else:
+                    print(f"Warning: Unsupported pattern_source '{source}', defaulting to max_count = 1.", 
+                          file=sys.stderr)
                     max_count = 1  # fallback
                 
                 # Parse range specification

@@ -18,6 +18,7 @@ This release implements a centralized database connection manager addressing Git
 **🔧 Code Quality Improvements:**
 - **Refactored Query Building**: Consolidated duplicate SQL query construction logic with `_build_metrics_query()` helper method
 - **Error Handling Consistency**: Improved error handling pattern in OpenTelemetry connector with dedicated helper methods
+- **Exception Safety**: Fixed potential AttributeError in OpenTelemetry connector by adding fallback for service name
 - **Removed Redundancy**: Eliminated duplicate code in metric table operations for better maintainability
 - **Enhanced Documentation**: Added comprehensive comments for complex logic sections
 - **Schema Detection**: Improved handling of different database schema versions
@@ -32,6 +33,7 @@ This release implements a centralized database connection manager addressing Git
 - **Enhanced `common/otel_connector.py`**:
   - Added `_handle_connection_error()` method for consistent error management
   - Consolidated error handling logic for connection issues
+  - Added service name fallback to prevent AttributeError if `display_name` is not set
   - Improved exception safety throughout the codebase
 - **Addressed GitHub Copilot Review**: Resolved suggestion for using context managers in SQLite connections
 - **Code Quality**: Eliminated redundant connection handling code across 7+ database methods

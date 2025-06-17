@@ -171,7 +171,7 @@ class InstanaOTelConnector:
         
         # Store OpenTelemetry standard resource attributes
         self.attributes = {
-            "service.name": self.display_name,
+            "service.name": getattr(self, 'display_name', service_name),  # Use self.display_name with fallback to self.service_name
             "service.namespace": service_namespace,
             "service.instance.id": self.service_id,  # OpenTelemetry standard attribute
             "host.id": self.host_id,                 # OpenTelemetry standard attribute  
