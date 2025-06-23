@@ -382,128 +382,168 @@ class InstanaOTelConnector:
                 logger.error(f"Error in metric callback for {metric_name}: {e}")
         return callback
     
+    def create_observable(self, name, otel_type, unit=None, decimals=2, is_percentage=False, 
+                         is_counter=False, description=None, pattern_type=None, 
+                         pattern_source=None, pattern_range=None, display_name=None):
+        """
+        Create an observable metric based on TOML configuration parameters.
+        
+        Args:
+            name: Metric name from TOML
+            otel_type: OpenTelemetry metric type ("Gauge", "Counter", "UpDownCounter")  
+            unit: Unit from TOML (e.g., "%", "bytes", "threads")
+            decimals: Number of decimal places from TOML
+            is_percentage: Whether metric is a percentage from TOML
+            is_counter: Whether metric is a counter from TOML
+            description: Description from TOML
+            pattern_type: Pattern type from TOML (e.g., "indexed")
+            pattern_source: Pattern source from TOML (e.g., "cpu_count")
+            pattern_range: Pattern range from TOML (e.g., "0-auto")
+            display_name: Display name from metadata store
+            
+        Returns:
+            The created observable metric
+        """
+        if not hasattr(self, 'meter') or not self.meter:
+            logger.error(f"Cannot create observable metric {name}: Meter not initialized")
+            return None
+            
+        # Convert TOML otel_type to OpenTelemetry method name
+        if otel_type == "UpDownCounter":
+            method_name = "create_observable_up_down_counter"
+        else:
+            # For "Gauge", "Counter", or any other type
+            method_name = f"create_observable_{otel_type.lower()}"
+        
+        # Get the method dynamically, with fallback to gauge
+        create_method = getattr(self.meter, method_name, self.meter.create_observable_gauge)
+        
+        # Use simple metric name from metadata store
+        simple_name = self._metadata_store.get_simple_metric_name(name)
+        
+        # Create callback with all TOML parameters
+        callback = self._create_metric_callback(
+            metric_name=name,
+            is_percentage=is_percentage,
+            is_counter=is_counter,
+            decimal_places=decimals,
+            display_name=display_name
+        )
+        
+        # Log creation with TOML type
+        logger.debug(f"Creating observable {otel_type} metric: {name} -> {simple_name}")
+        
+        # Create and return the metric using the dynamically obtained method
+        return create_method(
+            name=simple_name,
+            description=description or f"Metric for {name}",
+            unit=unit or ("%" if is_percentage else ""),
+            callbacks=[callback]
+        )
+    
+    def _sync_toml_to_database(self):
+        """
+        Sync TOML metric definitions to database registry.
+        Check if TOML has changed since last sync and update database accordingly.
+        """
+        try:
+            # Load current metric definitions from TOML
+            if not get_expanded_metrics:
+                logger.error("TOML utilities not available. Cannot sync metrics to database.")
+                return False
+            
+            metric_definitions = get_expanded_metrics()
+            logger.info(f"Syncing {len(metric_definitions)} TOML metric definitions to database")
+            
+            # Sync each metric definition to database
+            for metric_def in metric_definitions:
+                name = metric_def['name']
+                
+                # Sync metric to database with all TOML parameters
+                metric_id, display_name = self._metadata_store.sync_metric_from_toml(
+                    service_id=self.service_id,
+                    name=name,
+                    unit=metric_def.get('unit', ""),
+                    otel_type=metric_def.get('otel_type', 'Gauge'),
+                    decimals=metric_def.get('decimals', 2),
+                    is_percentage=metric_def.get('is_percentage', False),
+                    is_counter=metric_def.get('is_counter', False),
+                    description=metric_def.get('description', f"Metric for {name}"),
+                    pattern_type=metric_def.get('pattern_type'),
+                    pattern_source=metric_def.get('pattern_source'),
+                    pattern_range=metric_def.get('pattern_range')
+                )
+                
+            # Remove metrics from database that are no longer in TOML
+            current_metric_names = {metric_def['name'] for metric_def in metric_definitions}
+            self._metadata_store.remove_obsolete_metrics(self.service_id, current_metric_names)
+            
+            logger.info("Successfully synced TOML metrics to database")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error syncing TOML to database: {e}")
+            return False
+
     def _register_observable_metrics(self):
-        """Register individual observable metrics with OpenTelemetry using TOML-based definitions."""
+        """
+        Register individual observable metrics with OpenTelemetry using database registry.
+        At startup: sync TOML changes to database, then use database as single source of truth.
+        """
         if not hasattr(self, 'meter') or not self.meter:
             logger.error("Cannot register metrics: Meter not initialized")
             return
             
         try:
-            # Load metric definitions from TOML with pattern expansion
-            if not get_expanded_metrics:
-                logger.error("TOML utilities not available. Metric definitions cannot be loaded. Please ensure common/toml_utils.py exists and get_expanded_metrics is available.")
-                raise RuntimeError("TOML utilities required for metric definitions are not available")
+            # Step 1: Sync TOML changes to database (register once)
+            if not self._sync_toml_to_database():
+                logger.error("Failed to sync TOML to database. Cannot proceed with metric registration.")
+                return
+                
+            # Step 2: Load metrics from database registry (read many)
+            database_metrics = self._metadata_store.get_service_metrics(self.service_id)
+            logger.info(f"Loaded {len(database_metrics)} metrics from database registry")
             
-            metric_definitions = get_expanded_metrics()
-            logger.info(f"Loaded {len(metric_definitions)} metric definitions from TOML")
-            
-            # Build lookup dictionaries from TOML definitions
-            expected_metrics = []
-            percentage_metrics = {}
-            counter_metrics = {}
-            otel_type_map = {}
-            metric_descriptions = {}
-            decimal_places_map = {}
-            
-            for metric_def in metric_definitions:
-                name = metric_def['name']
-                expected_metrics.append(name)
-                percentage_metrics[name] = metric_def.get('is_percentage', False)
-                counter_metrics[name] = metric_def.get('is_counter', False)
-                otel_type_map[name] = metric_def.get('otel_type', 'Gauge')
-                metric_descriptions[name] = metric_def.get('description', f"Metric for {name}")
-                decimal_places_map[name] = metric_def.get('decimals', 2)
-            
-            # Register individual observable metrics using TOML-based configuration
-            for metric_name in expected_metrics:
+            # Step 3: Register metrics with OpenTelemetry using database definitions
+            for metric_record in database_metrics:
                 try:
-                    # Get configuration from TOML definitions
-                    is_percentage = percentage_metrics.get(metric_name, False)
-                    is_counter = counter_metrics.get(metric_name, False)
-                    otel_type = otel_type_map.get(metric_name, 'Gauge')
-                    description = metric_descriptions.get(metric_name, f"Metric for {metric_name}")
+                    metric_name = metric_record['name']
+                    otel_type = metric_record['otel_type']
+                    unit = metric_record['unit']
+                    decimals = metric_record['decimal_places']
+                    is_percentage = metric_record['is_percentage']
+                    is_counter = metric_record['is_counter']
+                    description = metric_record['description']
+                    display_name = metric_record['display_name']
                     
-                    # Get decimal places from manifest.toml
-                    decimal_places = decimal_places_map.get(metric_name, 2)
-                    
-                    # Get metric ID and display name from metadata store (now with otel_type)
-                    metric_id, display_name = self._metadata_store.get_or_create_metric(
-                        service_id=self.service_id,
+                    # Create the observable metric using database configuration
+                    metric = self.create_observable(
                         name=metric_name,
-                        unit="%" if is_percentage else "",
-                        format_type="counter" if is_counter else ("percentage" if is_percentage else "number"),
-                        decimal_places=decimal_places,
+                        otel_type=otel_type,
+                        unit=unit,
+                        decimals=decimals,
                         is_percentage=is_percentage,
                         is_counter=is_counter,
-                        otel_type=otel_type
-                    )
-                    
-                    # Create the observable metric with proper naming (without trailing {})
-                    simple_name = self._metadata_store.get_simple_metric_name(metric_name)
-                    
-                    gauge = self.meter.create_observable_gauge(
-                        name=simple_name,
                         description=description,
-                        unit="%" if is_percentage else "",
-                        callbacks=[self._create_metric_callback(
-                            metric_name, 
-                            is_percentage, 
-                            is_counter, 
-                            decimal_places, 
-                            display_name
-                        )]
+                        display_name=display_name
                     )
                     
                     # Add to registry for tracking
                     self._metrics_registry.add(metric_name)
-                    logger.debug(f"Registered observable metric: {metric_name} -> {simple_name} ({otel_type})")
+                    logger.debug(f"Registered observable metric from database: {metric_name} ({otel_type})")
                     
                 except Exception as e:
-                    logger.error(f"Error registering metric {metric_name}: {e}")
+                    logger.error(f"Error registering metric {metric_record.get('name', 'unknown')}: {e}")
                     continue
-                
-            # Also create a general callback for any metrics not in the expected list
-            # This allows handling of dynamic or unexpected metrics
-            def general_callback(options):
-                for name, value in self._metrics_state.items():
-                    if name not in expected_metrics and isinstance(value, (int, float)):
-                        # Yield Observation with metric metadata for dynamic metrics
-                        # The "metric_name" attribute helps identify the source in Instana
-                        # This metadata structure is used by Instana to correlate metrics with their source
-                        # and is required for proper identification of dynamic metrics in the Instana UI
-                        yield Observation(value, {"metric_name": name})
-                        logger.debug(f"Observed general metric {name}={value}")
             
-            # Register a general observable gauge for unexpected metrics
-            general_gauge = self.meter.create_observable_gauge(
-                name=f"{self.service_name}.general_metrics",
-                description=f"General metrics for {self.service_name}",
-                unit="1",
-                callbacks=[general_callback]
-            )
-            
-            # Add the general gauge name to the metrics registry
-            self._metrics_registry.add(f"{self.service_name}.general_metrics")
-            
-            logger.info(f"Registered {len(expected_metrics)} individual observable metrics for {self.service_name}")
+            logger.info(f"Registered {len(self._metrics_registry)} observable metrics from database for {self.service_name}")
         except Exception as e:
             logger.error(f"Error registering observable metrics: {e}")
         
-    def _register_metric_if_new(self, name: str, percentage_metrics: Dict[str, bool]):
-        """
-        Register a metric if it's not already registered.
-        
-        Args:
-            name: Name of the metric to register
-            percentage_metrics: Dictionary mapping metric names to boolean indicating if they are percentages
-        """
-        if name not in self._metrics_registry and name != "monitored_pids":
-            # Register the new metric for observation
-            self._register_new_metric(name, percentage_metrics.get(name, False))
-
     def record_metrics(self, metrics: Dict[str, Any]):
         """
         Update the metrics state with new values.
+        Only accepts metrics that are defined in TOML configuration.
         
         Args:
             metrics: Dictionary of metrics to record
@@ -517,110 +557,40 @@ class InstanaOTelConnector:
             return
             
         try:
-            # Define which metrics should be displayed as percentages
-            percentage_metrics = {
-                "cpu_usage": True,
-                "memory_usage": True
-            }
-            
-            # Add CPU core metrics to percentage metrics
-            cpu_core_count = os.cpu_count() or 1  # Get the number of CPU cores, fallback to 1 if None
-            for i in range(cpu_core_count):
-                percentage_metrics[f"cpu_core_{i}"] = True
-                
             # Update the metrics state dictionary with new values
             metrics_updated = 0
+            metrics_rejected = 0
+            
             for name, value in metrics.items():
+                # Only process metrics that are registered (defined in TOML)
+                if name not in self._metrics_registry:
+                    logger.warning(f"Metric '{name}' not defined in TOML configuration, rejecting")
+                    metrics_rejected += 1
+                    continue
+                    
                 if isinstance(value, (int, float)):
                     # Store the raw value - formatting happens in the callback
                     self._metrics_state[name] = value
                     metrics_updated += 1
-                    
-                    # Check if this is a new metric that needs to be registered
-                    self._register_metric_if_new(name, percentage_metrics)
-                    
                     logger.debug(f"Updated metric state {name}={value}")
-                elif isinstance(value, str) and value.isdigit():
-                    # Try to convert string numbers
-                    self._metrics_state[name] = float(value)
-                    metrics_updated += 1
-                    
-                    # Check if this is a new metric that needs to be registered
-                    self._register_metric_if_new(name, percentage_metrics)
-                    
-                    logger.debug(f"Updated metric state {name}={value}")
+                elif isinstance(value, str):
+                    # Try to convert string numbers (handles both integers and decimals)
+                    try:
+                        numeric_value = float(value)
+                        self._metrics_state[name] = numeric_value
+                        metrics_updated += 1
+                        logger.debug(f"Updated metric state {name}={value} (converted from string)")
+                    except ValueError:
+                        # Skip non-numeric string values
+                        logger.debug(f"Skipping non-numeric string metric: {name}={value}")
                 else:
                     # Skip non-numeric metrics
                     logger.debug(f"Skipping non-numeric metric: {name}={value}")
             
-            logger.debug(f"Updated {metrics_updated} metrics for {self.service_name}")
+            logger.debug(f"Updated {metrics_updated} metrics, rejected {metrics_rejected} undefined metrics for {self.service_name}")
         except Exception as e:
             logger.error(f"Error recording metrics: {e}")
             
-    def _register_new_metric(self, name: str, is_percentage: bool = False):
-        """
-        Register a new metric that was not in the initial expected metrics list.
-        
-        Args:
-            name: Name of the metric to register
-            is_percentage: Whether this metric should be displayed as a percentage
-        """
-        if not hasattr(self, 'meter') or not self.meter:
-            logger.error(f"Cannot register new metric {name}: Meter not initialized")
-            return
-            
-        # Define which metrics are counters
-        counter_metrics = {
-            "process_count": True,
-            "disk_read_bytes": True,
-            "disk_write_bytes": True,
-            "open_file_descriptors": True,
-            "thread_count": True,
-            "voluntary_ctx_switches": True,
-            "nonvoluntary_ctx_switches": True,
-            "max_threads_per_process": True,
-            "min_threads_per_process": True
-        }
-            
-        try:
-            # Check if this metric is a counter
-            is_counter = counter_metrics.get(name, False)
-            
-            # Set decimal places to 0 for counters
-            decimal_places = 0 if is_counter else 2
-            
-            # Get metric ID and display name from metadata store
-            metric_id, display_name = self._metadata_store.get_or_create_metric(
-                service_id=self.service_id,
-                name=name,
-                unit="%" if is_percentage else "",
-                format_type="counter" if is_counter else ("percentage" if is_percentage else "number"),
-                decimal_places=decimal_places,
-                is_percentage=is_percentage,
-                is_counter=is_counter
-            )
-            
-            # Create the observable gauge with the callback
-            gauge = self.meter.create_observable_gauge(
-                # Use simple metric name from metadata store for display in Instana
-                name=self._metadata_store.get_simple_metric_name(name),
-                description=f"Metric for {display_name}",
-                unit="%" if is_percentage else "1",
-                callbacks=[self._create_metric_callback(
-                    name, 
-                    is_percentage, 
-                    is_counter, 
-                    decimal_places, 
-                    display_name
-                )]
-            )
-            
-            # Add to registry
-            self._metrics_registry.add(name)
-            logger.info(f"Registered new observable metric: {name} (display: {display_name})")
-            
-        except Exception as e:
-            logger.error(f"Error registering new metric {name}: {e}")
             
     def create_span(self, name: str, attributes: Optional[Dict[str, Any]] = None):
         """
