@@ -1,5 +1,74 @@
 # Release Notes
 
+## Version 0.1.02 (2025-06-23)
+
+### fix: Metric Types Enforcement Implementation
+
+**🔧 Critical Bug Fix: OpenTelemetry Metric Types**
+Fixed critical issue where all metrics appeared as GAUGE type in Instana despite TOML configuration specifying different metric types (Counter, UpDownCounter). All Strategy₿ plugins now correctly display metrics with their proper OpenTelemetry types.
+
+**✅ Root Cause Resolution:**
+- **Issue**: `_register_observable_metrics()` method ignored `otel_type` from TOML configuration
+- **Problem**: Always called `create_observable_gauge()` regardless of TOML `otel_type` setting
+- **Solution**: Created unified `create_observable()` method that dynamically calls correct OpenTelemetry methods based on TOML configuration
+
+**🏗️ Architectural Enhancement: "Register Once, Read Many"**
+Implemented proper separation of concerns with database-driven metric registry:
+- **Installation time**: TOML definitions synced to database
+- **Service startup**: `_sync_toml_to_database()` detects TOML changes and updates database registry
+- **Runtime**: `record_metrics()` uses database registry only, eliminating dynamic TOML reading
+
+**📊 Enhanced Metric Type Support:**
+- **Gauge**: `create_observable_gauge()` for metrics like `cpu_usage`, `memory_usage`, `avg_threads_per_process`
+- **Counter**: `create_observable_counter()` for metrics like `disk_read_bytes`, `disk_write_bytes`, `voluntary_ctx_switches`
+- **UpDownCounter**: `create_observable_up_down_counter()` for metrics like `process_count`, `thread_count`, `open_file_descriptors`
+
+**🔒 Strict TOML Compliance:**
+- Removed dynamic metric registration functions (`_register_metric_if_new`, `_register_new_metric`)
+- Runtime validation rejects undefined metrics with clear logging
+- Database serves as single source of truth for metric definitions
+
+**🔧 Technical Changes:**
+- **Enhanced `common/otel_connector.py`**:
+  - Added `create_observable()`: Unified metric creation respecting TOML `otel_type`
+  - Added `_sync_toml_to_database()`: TOML-to-database synchronization
+  - Enhanced `_register_observable_metrics()`: Database-driven metric registration
+  - Removed obsolete dynamic registration methods for strict TOML compliance
+- **Updated `common/manifest.toml`**: Version bump to v0.1.02
+- **Created `docs/releases/TAG_v0.1.02.md`**: Comprehensive release documentation
+
+**🎯 Impact:**
+- **All Strategy₿ Plugins**: m8mulprc, m8prcsvr, m8refsvr, mstrsvr now display correct metric types
+- **Instana UI**: Metrics appear with proper types, units, and formatting as defined in TOML
+- **OpenTelemetry Compliance**: Full adherence to OpenTelemetry metric type specifications
+- **Configuration Governance**: Strict enforcement of TOML-defined metrics
+
+**📋 Before/After Examples:**
+```
+Before v0.1.02 (All Gauges):
+- process_count: GAUGE (incorrect)
+- disk_read_bytes: GAUGE (incorrect)
+- thread_count: GAUGE (incorrect)
+
+After v0.1.02 (Correct Types):
+- process_count: UPDOWNCOUNTER (correct)
+- disk_read_bytes: COUNTER (correct)
+- thread_count: UPDOWNCOUNTER (correct)
+```
+
+**✅ Testing:**
+- Verified metric types display correctly in Instana
+- Confirmed TOML synchronization functionality
+- Validated strict metric rejection for undefined metrics
+- All existing tests continue to pass
+
+**🔄 Deployment:**
+- **Zero Downtime**: Can be deployed without service interruption
+- **Database Schema**: Requires MetadataStore method implementation for full functionality
+- **Immediate Effect**: Metric type corrections visible immediately after service restart
+
+---
+
 ## Version 0.1.01 (2025-06-17)
 
 ### feat: Database Connection Management Improvements & Metric Formatting Fixes

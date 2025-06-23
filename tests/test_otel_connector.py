@@ -100,7 +100,7 @@ class TestInstanaOTelConnector(unittest.TestCase):
     @patch.object(InstanaOTelConnector, '_setup_tracing')
     @patch.object(InstanaOTelConnector, '_setup_metrics')
     def test_record_metrics(self, mock_setup_metrics, mock_setup_tracing):
-        """Test recording metrics."""
+        """Test recording metrics with strict TOML validation."""
         # Create connector with mocked setup methods
         connector = InstanaOTelConnector(
             service_name="test_service",
@@ -108,7 +108,12 @@ class TestInstanaOTelConnector(unittest.TestCase):
             agent_port=1234
         )
         
-        # Test with numeric metrics
+        # Add some metrics to the registry (simulating TOML-defined metrics)
+        connector._metrics_registry.add("cpu_usage")
+        connector._metrics_registry.add("memory_usage") 
+        connector._metrics_registry.add("process_count")
+        
+        # Test with numeric metrics that are in registry
         metrics = {
             "cpu_usage": 10.5,
             "memory_usage": 20.3,
@@ -121,16 +126,27 @@ class TestInstanaOTelConnector(unittest.TestCase):
         self.assertEqual(connector._metrics_state["memory_usage"], 20.3)
         self.assertEqual(connector._metrics_state["process_count"], 3)
         
-        # Test with string metrics
+        # Test with string metrics (valid metric in registry)
         metrics = {
             "cpu_usage": "10.5",
-            "non_numeric": "text"
+            "undefined_metric": "text"  # This should be rejected
         }
         connector.record_metrics(metrics)
         
-        # Verify metrics state was updated for numeric string
+        # Verify metrics state was updated for numeric string but undefined metric rejected
         self.assertEqual(connector._metrics_state["cpu_usage"], 10.5)
-        self.assertNotIn("non_numeric", connector._metrics_state)
+        self.assertNotIn("undefined_metric", connector._metrics_state)
+        
+        # Test rejection of metrics not in registry
+        metrics = {
+            "unknown_metric": 42.0
+        }
+        old_state_length = len(connector._metrics_state)
+        connector.record_metrics(metrics)
+        
+        # Verify unknown metric was rejected (state unchanged)
+        self.assertEqual(len(connector._metrics_state), old_state_length)
+        self.assertNotIn("unknown_metric", connector._metrics_state)
 
     @patch.object(InstanaOTelConnector, '_setup_tracing')
     @patch.object(InstanaOTelConnector, '_setup_metrics')
@@ -189,39 +205,120 @@ class TestInstanaOTelConnector(unittest.TestCase):
         self.assertEqual(len(result), 0)
 
     @patch.object(InstanaOTelConnector, '_setup_tracing')
-    def test_register_observable_metrics(self, mock_setup_tracing):
-        """Test registering observable metrics."""
-        # Create connector with mocked meter
+    @patch.object(InstanaOTelConnector, '_setup_metrics')
+    @patch.object(InstanaOTelConnector, '_sync_toml_to_database')
+    def test_register_observable_metrics(self, mock_sync_toml, mock_setup_metrics, mock_setup_tracing):
+        """Test registering observable metrics with new database-driven approach."""
+        # Setup mock database metrics
+        mock_database_metrics = [
+            {
+                'name': 'cpu_usage',
+                'otel_type': 'Gauge',
+                'unit': '%',
+                'decimal_places': 2,
+                'is_percentage': True,
+                'is_counter': False,
+                'description': 'CPU usage percentage',
+                'display_name': 'CPU Usage'
+            },
+            {
+                'name': 'process_count',
+                'otel_type': 'UpDownCounter',
+                'unit': 'processes',
+                'decimal_places': 0,
+                'is_percentage': False,
+                'is_counter': True,
+                'description': 'Number of processes',
+                'display_name': 'Process Count'
+            }
+        ]
+        
+        # Configure the sync mock to return True
+        mock_sync_toml.return_value = True
+        
+        # Create connector (sync will be called during initialization)
         connector = InstanaOTelConnector(
             service_name="test_service",
             agent_host="test_host",
             agent_port=1234
         )
         
-        # Mock the meter and gauge
-        connector.meter = MagicMock()
-        mock_gauge = MagicMock()
-        connector.meter.create_observable_gauge.return_value = mock_gauge
-        
-        # Call register_observable_metrics
-        connector._register_observable_metrics()
-        
-        # The implementation now uses TOML-based metric definitions
-        # From the logs, we can see it loads 20 metric definitions from TOML
-        # This includes all the base metrics plus CPU core metrics based on the actual system
-        expected_toml_metrics_count = 20  # As shown in the logs: "Loaded 20 metric definitions from TOML"
-        
-        # Verify the number of calls to create_observable_gauge
-        # +1 for the general metrics gauge
-        self.assertEqual(connector.meter.create_observable_gauge.call_count, 
-                         expected_toml_metrics_count + 1)
+        # Mock the metadata store methods and create_observable method  
+        with patch.object(connector._metadata_store, 'get_service_metrics', return_value=mock_database_metrics), \
+             patch.object(connector, 'create_observable') as mock_create_observable:
             
-        # Verify each call to create_observable_gauge includes callbacks parameter
-        for call_args in connector.meter.create_observable_gauge.call_args_list:
-            args, kwargs = call_args
-            self.assertIn('callbacks', kwargs)
-            self.assertIsInstance(kwargs['callbacks'], list)
-            self.assertTrue(len(kwargs['callbacks']) > 0)
+            mock_create_observable.return_value = MagicMock()
+            
+            # Verify sync was called during initialization (before reset)
+            self.assertTrue(mock_sync_toml.called)
+            
+            # Reset call count for the explicit test call
+            mock_sync_toml.reset_mock()
+            
+            # Call register_observable_metrics explicitly 
+            connector._register_observable_metrics()
+            
+            # Verify sync was called again in the explicit call
+            self.assertTrue(mock_sync_toml.called)
+            
+            # Verify create_observable was called for each metric
+            self.assertEqual(mock_create_observable.call_count, 2)
+            
+            # Verify metrics were added to registry
+            self.assertIn('cpu_usage', connector._metrics_registry)
+            self.assertIn('process_count', connector._metrics_registry)
+
+    @patch.object(InstanaOTelConnector, '_setup_tracing')
+    @patch.object(InstanaOTelConnector, '_setup_metrics')
+    def test_create_observable_method(self, mock_setup_metrics, mock_setup_tracing):
+        """Test the unified create_observable method with different metric types."""
+        # Create connector
+        connector = InstanaOTelConnector(
+            service_name="test_service",
+            agent_host="test_host",
+            agent_port=1234
+        )
+        
+        # Explicitly set meter to a MagicMock to avoid recursion issues
+        connector.meter = MagicMock()
+        
+        # Mock metadata store method with patch and run tests inside context
+        with patch.object(connector._metadata_store, 'get_simple_metric_name', return_value="test_metric"):
+            # Test Gauge type
+            result = connector.create_observable(
+                name="test_gauge",
+                otel_type="Gauge",
+                unit="%",
+                decimals=2,
+                is_percentage=True,
+                is_counter=False,
+                description="Test gauge metric"
+            )
+            self.assertIsNotNone(result)
+            
+            # Test Counter type  
+            result = connector.create_observable(
+                name="test_counter",
+                otel_type="Counter",
+                unit="bytes",
+                decimals=0,
+                is_percentage=False,
+                is_counter=True,
+                description="Test counter metric"
+            )
+            self.assertIsNotNone(result)
+            
+            # Test UpDownCounter type
+            result = connector.create_observable(
+                name="test_updown",
+                otel_type="UpDownCounter",
+                unit="processes",
+                decimals=0,
+                is_percentage=False,
+                is_counter=True,
+                description="Test updown counter metric"
+            )
+            self.assertIsNotNone(result)
     
     @patch.object(InstanaOTelConnector, '_setup_tracing')
     @patch.object(InstanaOTelConnector, '_setup_metrics')

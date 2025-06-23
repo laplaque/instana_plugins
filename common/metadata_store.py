@@ -1082,6 +1082,163 @@ class MetadataStore:
         # (formatting is handled separately for display purposes)
         return simple_name.strip()
     
+    def sync_metric_from_toml(
+        self,
+        service_id: str,
+        name: str,
+        unit: str = "",
+        otel_type: str = "Gauge",
+        decimals: int = 2,
+        is_percentage: bool = False,
+        is_counter: bool = False,
+        description: str = "",
+        pattern_type: Optional[str] = None,
+        pattern_source: Optional[str] = None,
+        pattern_range: Optional[str] = None
+    ) -> Tuple[str, str]:
+        """
+        Sync a metric definition from TOML to database.
+        
+        This method creates or updates a metric definition in the database
+        based on TOML configuration parameters.
+        
+        Args:
+            service_id: ID of the service this metric belongs to
+            name: Metric name from TOML
+            unit: Unit from TOML
+            otel_type: OpenTelemetry metric type from TOML
+            decimals: Number of decimal places from TOML
+            is_percentage: Whether metric is a percentage from TOML
+            is_counter: Whether metric is a counter from TOML
+            description: Description from TOML
+            pattern_type: Pattern type from TOML (e.g., "indexed")
+            pattern_source: Pattern source from TOML (e.g., "cpu_count")
+            pattern_range: Pattern range from TOML (e.g., "0-auto")
+            
+        Returns:
+            Tuple of (metric_id, display_name)
+        """
+        # Use the existing get_or_create_metric method with TOML parameters
+        return self.get_or_create_metric(
+            service_id=service_id,
+            name=name,
+            unit=unit,
+            format_type="counter" if is_counter else ("percentage" if is_percentage else "number"),
+            decimal_places=decimals,
+            is_percentage=is_percentage,
+            is_counter=is_counter,
+            otel_type=otel_type
+        )
+    
+    def get_service_metrics(self, service_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all metrics for a service from the database registry.
+        
+        Args:
+            service_id: ID of the service
+            
+        Returns:
+            List of metric dictionaries with all required fields
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Check if otel_type column exists
+                include_otel_type = self.metrics_columns and 'otel_type' in self.metrics_columns
+                
+                if include_otel_type:
+                    cursor.execute(
+                        """
+                        SELECT id, name, display_name, unit, format_type, 
+                               decimal_places, is_percentage, is_counter, otel_type
+                        FROM metrics
+                        WHERE service_id = ?
+                        """,
+                        (service_id,)
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT id, name, display_name, unit, format_type, 
+                               decimal_places, is_percentage, is_counter
+                        FROM metrics
+                        WHERE service_id = ?
+                        """,
+                        (service_id,)
+                    )
+                
+                results = cursor.fetchall()
+                
+                metrics = []
+                for row in results:
+                    metric = {
+                        'id': row[0],
+                        'name': row[1], 
+                        'display_name': row[2],
+                        'unit': row[3],
+                        'format_type': row[4],
+                        'decimal_places': row[5],
+                        'is_percentage': bool(row[6]),
+                        'is_counter': bool(row[7]),
+                        'otel_type': row[8] if include_otel_type and len(row) > 8 else 'Gauge',
+                        'description': f"Metric for {row[1]}"  # Generate description if not stored
+                    }
+                    metrics.append(metric)
+                
+                logger.debug(f"Retrieved {len(metrics)} metrics for service {service_id}")
+                return metrics
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error in get_service_metrics: {e}")
+            return []
+    
+    def remove_obsolete_metrics(self, service_id: str, current_metric_names: set) -> int:
+        """
+        Remove metrics from database that are no longer in TOML configuration.
+        
+        Args:
+            service_id: ID of the service
+            current_metric_names: Set of metric names currently in TOML
+            
+        Returns:
+            Number of metrics removed
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Get all metrics currently in database for this service
+                cursor.execute(
+                    "SELECT id, name FROM metrics WHERE service_id = ?",
+                    (service_id,)
+                )
+                database_metrics = cursor.fetchall()
+                
+                # Find metrics to remove (in database but not in current TOML)
+                metrics_to_remove = []
+                for metric_id, metric_name in database_metrics:
+                    if metric_name not in current_metric_names:
+                        metrics_to_remove.append((metric_id, metric_name))
+                
+                # Remove obsolete metrics
+                removed_count = 0
+                for metric_id, metric_name in metrics_to_remove:
+                    cursor.execute("DELETE FROM metrics WHERE id = ?", (metric_id,))
+                    removed_count += 1
+                    logger.info(f"Removed obsolete metric: {metric_name} (ID: {metric_id})")
+                
+                conn.commit()
+                
+                if removed_count > 0:
+                    logger.info(f"Removed {removed_count} obsolete metrics for service {service_id}")
+                
+                return removed_count
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error in remove_obsolete_metrics: {e}")
+            return 0
+
     def format_metric_value(
         self, 
         value: float, 
