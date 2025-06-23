@@ -27,27 +27,51 @@ jobs:
           echo "docs/releases contents:"
           ls -la docs/releases || echo "docs/releases directory not found"
           
-          # Find the TAG file in the merged PR - check both root and docs/releases
+          # Function to find the latest TAG file by semantic version sorting
+          find_latest_tag_file() {
+            local search_dir="$1"
+            local tag_files=$(find "$search_dir" -maxdepth 1 -name "TAG_v*.md" 2>/dev/null)
+            
+            if [ -z "$tag_files" ]; then
+              echo ""
+              return
+            fi
+            
+            # Extract version numbers, sort by semantic version, return latest file
+            echo "$tag_files" | \
+              sed 's/.*TAG_v\([0-9]\+\.[0-9]\+\.[0-9]\+\)\.md/\1 &/' | \
+              sort -V | \
+              tail -1 | \
+              cut -d' ' -f2
+          }
+          
+          # Find the latest TAG file in the merged PR - check both root and docs/releases
           echo "Searching for TAG files in root directory..."
-          ROOT_TAG_FILE=$(find . -maxdepth 1 -name "TAG_v*.md" | head -1)
+          ROOT_TAG_FILE=$(find_latest_tag_file ".")
           echo "Root TAG files found: $(find . -maxdepth 1 -name "TAG_v*.md" || echo "None")"
+          if [ -n "$ROOT_TAG_FILE" ]; then
+            echo "Latest root TAG file: $ROOT_TAG_FILE"
+          fi
           
           echo "Searching for TAG files in docs/releases directory..."
           DOCS_TAG_FILE=""
           if [ -d "./docs/releases" ]; then
-            DOCS_TAG_FILE=$(find ./docs/releases -maxdepth 1 -name "TAG_v*.md" | head -1 || echo "")
+            DOCS_TAG_FILE=$(find_latest_tag_file "./docs/releases")
             echo "docs/releases TAG files found: $(find ./docs/releases -maxdepth 1 -name "TAG_v*.md" || echo "None")"
+            if [ -n "$DOCS_TAG_FILE" ]; then
+              echo "Latest docs/releases TAG file: $DOCS_TAG_FILE"
+            fi
           else
             echo "docs/releases directory does not exist"
           fi
           
-          # Determine which TAG file to use
+          # Determine which TAG file to use (prioritize root over docs/releases)
           if [ -n "$ROOT_TAG_FILE" ]; then
             TAG_FILE="$ROOT_TAG_FILE"
-            echo "✅ Found TAG file in root: $TAG_FILE"
+            echo "✅ Found latest TAG file in root: $TAG_FILE"
           elif [ -n "$DOCS_TAG_FILE" ]; then
             TAG_FILE="$DOCS_TAG_FILE"
-            echo "✅ Found TAG file in docs/releases: $TAG_FILE"
+            echo "✅ Found latest TAG file in docs/releases: $TAG_FILE"
           else
             echo "❌ No TAG file found in merged PR. Skipping tag creation."
             exit 0
