@@ -1,5 +1,31 @@
 # Release Notes
 
+## Version 0.1.03 (2025-06-24)
+
+### Fixes and Improvements
+
+This release fixes several critical bugs related to how metrics are reported and displayed in Instana. It also adds new, more detailed metrics for better process monitoring.
+
+**Key Fixes:**
+
+*   **Cleaner Service Names:** Service names in Instana will no longer have a repetitive prefix (e.g., `m8mulprc/m8mulprc` is now just `m8mulprc`).
+*   **Accurate CPU Usage:** The `cpu_usage` metric now correctly shows the *average* CPU usage across all monitored processes, not the sum.
+*   **Better Metric Names:** Metric names with parameters are now displayed correctly.
+*   **Correct Metric Types:** Metrics now appear with their proper types (e.g., `Gauge`, `Counter`) as defined in the configuration.
+*   **Proper Percentage Formatting:** Percentage-based metrics are now sent correctly, so they display properly in Instana.
+
+**New Features:**
+
+*   **More Detailed Metrics:** We've added new metrics for more in-depth analysis, including:
+    *   Total CPU user time
+    *   Total CPU system time
+    *   Total RSS memory
+    *   Total virtual memory
+
+**Technical Improvements:**
+
+*   The code for monitoring processes and sending metrics has been reorganized to be more modular, readable, and easier to maintain.
+
 ## Version 0.1.02 (2025-06-23)
 
 ### fix: Metric Types Enforcement Implementation

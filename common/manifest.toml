@@ -1,5 +1,5 @@
 [metadata]
-version = "0.1.02"
+version = "0.1.03"
 metadata_schema_version = "2.0"
 generated_at = "2025-06-16T16:53:00.000000Z"
 framework_name = "OpenTelemetry Process Monitor"
@@ -184,6 +184,42 @@ decimals = 0
 is_percentage = false
 is_counter = false
 description = "Minimum threads per process"
+
+[[default_metrics]]
+name = "cpu_user_time_total"
+otel_type = "Counter"
+unit = "seconds"
+decimals = 2
+is_percentage = false
+is_counter = true
+description = "Total CPU user time"
+
+[[default_metrics]]
+name = "cpu_system_time_total"
+otel_type = "Counter"
+unit = "seconds"
+decimals = 2
+is_percentage = false
+is_counter = true
+description = "Total CPU system time"
+
+[[default_metrics]]
+name = "memory_rss_total"
+otel_type = "Gauge"
+unit = "bytes"
+decimals = 0
+is_percentage = false
+is_counter = false
+description = "Total resident set size (RSS) memory"
+
+[[default_metrics]]
+name = "memory_vms_total"
+otel_type = "Gauge"
+unit = "bytes"
+decimals = 0
+is_percentage = false
+is_counter = false
+description = "Total virtual memory size (VMS)"
 
 # Pattern-based metrics for dynamic system resources
 [[default_metrics]]

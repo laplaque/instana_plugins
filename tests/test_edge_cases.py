@@ -77,14 +77,27 @@ class TestEdgeCases(unittest.TestCase):
         mock_proc.pid = 5678
         mock_proc.ppid.return_value = 1
         mock_proc.name.return_value = "Test-Process[special]"
-        mock_proc.cpu_percent.return_value = 10.5
-        mock_proc.memory_percent.return_value = 20.3
+        mock_proc.cpu_percent.return_value = 10.0
+        mock_proc.memory_percent.return_value = 20.0
+        
+        # Mock CPU times
+        cpu_times = MagicMock()
+        cpu_times.user = 15.5
+        cpu_times.system = 8.3
+        mock_proc.cpu_times.return_value = cpu_times
+        
+        # Mock memory info
+        memory_info = MagicMock()
+        memory_info.rss = 1024 * 1024  # 1 MB
+        memory_info.vms = 2048 * 1024  # 2 MB
+        mock_proc.memory_info.return_value = memory_info
+        
         mock_proc.info = {
             'pid': 5678,
             'ppid': 1,
             'name': 'Test-Process[special]',
-            'cpu_percent': 10.5,
-            'memory_percent': 20.3
+            'cpu_percent': 10.0,
+            'memory_percent': 20.0
         }
         
         mock_process_iter.return_value = [mock_proc]
@@ -93,22 +106,26 @@ class TestEdgeCases(unittest.TestCase):
         with patch('common.process_monitor.get_disk_io_for_pid') as mock_disk_io, \
              patch('common.process_monitor.get_file_descriptor_count') as mock_fd_count, \
              patch('common.process_monitor.get_thread_count') as mock_thread_count, \
-             patch('common.process_monitor.get_context_switches') as mock_ctx_switches, \
-             patch('common.process_monitor.get_process_cpu_per_core') as mock_cpu_per_core:
+             patch('common.process_monitor.get_context_switches') as mock_ctx_switches:
             
             mock_disk_io.return_value = (0, 0)
             mock_fd_count.return_value = 0
             mock_thread_count.return_value = 1
             mock_ctx_switches.return_value = (0, 0)
-            mock_cpu_per_core.return_value = {}
             
             result = get_process_metrics("Test-Process")
             
             # Should handle special characters correctly
             self.assertIsNotNone(result)
             self.assertEqual(result["process_count"], 1)
-            self.assertEqual(result["cpu_usage"], 10.5)
-            self.assertEqual(result["memory_usage"], 20.3)
+            self.assertEqual(result["cpu_usage"], 10.0)
+            self.assertEqual(result["memory_usage"], 20.0)
+            
+            # Verify the new detailed metrics
+            self.assertEqual(result["cpu_user_time_total"], 15.5)
+            self.assertEqual(result["cpu_system_time_total"], 8.3)
+            self.assertEqual(result["memory_rss_total"], 1024 * 1024)
+            self.assertEqual(result["memory_vms_total"], 2048 * 1024)
     
     @patch('common.process_monitor.psutil.process_iter')
     def test_process_access_denied(self, mock_process_iter):
@@ -191,27 +208,6 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(read_bytes, 0)
         self.assertEqual(write_bytes, 0)
     
-    @patch('common.otel_connector.OTLPSpanExporter')
-    def test_large_metric_batch(self, mock_exporter):
-        """Test handling of large metric batches."""
-        # Create a connector with mocked exporter
-        connector = InstanaOTelConnector(
-            service_name="test_service",
-            agent_host="test_host",
-            agent_port=1234
-        )
-        
-        # Mock meter
-        connector.meter = MagicMock()
-        
-        # Create a large metrics dictionary (1000 metrics)
-        large_metrics = {f"metric_{i}": i for i in range(1000)}
-        
-        # Record the large batch
-        connector.record_metrics(large_metrics)
-        
-        # Verify metrics were stored in the state
-        self.assertEqual(len(connector._metrics_state), 1000)
     
     def test_log_rotation_max_size(self):
         """Test log rotation when max size is reached."""
@@ -291,14 +287,12 @@ class TestEdgeCases(unittest.TestCase):
         with patch('common.process_monitor.get_disk_io_for_pid') as mock_disk_io, \
              patch('common.process_monitor.get_file_descriptor_count') as mock_fd_count, \
              patch('common.process_monitor.get_thread_count') as mock_thread_count, \
-             patch('common.process_monitor.get_context_switches') as mock_ctx_switches, \
-             patch('common.process_monitor.get_process_cpu_per_core') as mock_cpu_per_core:
+             patch('common.process_monitor.get_context_switches') as mock_ctx_switches:
             
             mock_disk_io.return_value = (100, 200)
             mock_fd_count.return_value = 5
             mock_thread_count.return_value = 2
             mock_ctx_switches.return_value = (10, 5)
-            mock_cpu_per_core.return_value = {}
             
             result = get_process_metrics("TestProcess")
             

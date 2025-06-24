@@ -365,7 +365,10 @@ class InstanaOTelConnector:
                     raw_value = self._metrics_state[metric_name]
                     
                     # Format the value according to manifest.toml specifications
-                    if is_counter or decimal_places == 0:
+                    if is_percentage:
+                        # Convert percentage values (e.g., 25.5% or 250% for multi-core CPU) to decimal form
+                        value = round(float(raw_value) / 100.0, decimal_places)
+                    elif is_counter or decimal_places == 0:
                         # For counters and metrics with 0 decimals, show as integers
                         value = int(float(raw_value))
                     else:
@@ -410,13 +413,16 @@ class InstanaOTelConnector:
             
         # Convert TOML otel_type to OpenTelemetry method name
         if otel_type == "UpDownCounter":
+            # Handle the special case for UpDownCounter
             method_name = "create_observable_up_down_counter"
         else:
-            # For "Gauge", "Counter", or any other type
+            # Dynamically assemble the method name for all other types
             method_name = f"create_observable_{otel_type.lower()}"
         
-        # Get the method dynamically, with fallback to gauge
+        # Get the method dynamically, with a safe fallback to gauge
         create_method = getattr(self.meter, method_name, self.meter.create_observable_gauge)
+        if not hasattr(self.meter, method_name):
+            logger.warning(f"Unsupported otel_type '{otel_type}'. Defaulting to Gauge.")
         
         # Use simple metric name from metadata store
         simple_name = self._metadata_store.get_simple_metric_name(name)

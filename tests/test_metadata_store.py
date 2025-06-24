@@ -151,7 +151,7 @@ class TestMetadataStore(unittest.TestCase):
         )
         
         # Verify special CPU core formatting
-        self.assertEqual("CPU 1", core_display_name)
+        self.assertEqual("CPU Core 1", core_display_name)
     
     def test_format_metric_name(self):
         """Test formatting metric names according to rules"""
@@ -160,8 +160,8 @@ class TestMetadataStore(unittest.TestCase):
             ("memory_usage", "Memory Usage"),
             ("disk_read_bytes", "Disk Read Bytes"),
             ("thread_count", "Thread Count"),
-            ("cpu_core_0", "CPU 0"),
-            ("cpu_core_15", "CPU 15"),
+            ("cpu_core_0", "CPU Core 0"),
+            ("cpu_core_15", "CPU Core 15"),
             ("voluntary_ctx_switches", "Voluntary Ctx Switches")
         ]
         

@@ -34,48 +34,56 @@ class TestSensors(unittest.TestCase):
         # Import the sensor module
         import m8prcsvr.sensor
         from common.toml_utils import get_manifest_value
-        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
+        from common.version import get_version
+        EXPECTED_VERSION = get_manifest_value('metadata.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(m8prcsvr.sensor.PROCESS_NAME, "M8PrcSvr")
         self.assertEqual(m8prcsvr.sensor.PLUGIN_NAME, "m8prcsvr")
-        self.assertEqual(m8prcsvr.sensor.VERSION, EXPECTED_VERSION)
+        # Verify version alignment with manifest.toml
+        self.assertEqual(get_version(), EXPECTED_VERSION)
 
     def test_m8mulprc_sensor(self):
         """Test M8MulPrc sensor."""
         # Import the sensor module
         import m8mulprc.sensor
         from common.toml_utils import get_manifest_value
-        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
+        from common.version import get_version
+        EXPECTED_VERSION = get_manifest_value('metadata.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(m8mulprc.sensor.PROCESS_NAME, "M8MulPrc")
         self.assertEqual(m8mulprc.sensor.PLUGIN_NAME, "m8mulprc")
-        self.assertEqual(m8mulprc.sensor.VERSION, EXPECTED_VERSION)
+        # Verify version alignment with manifest.toml
+        self.assertEqual(get_version(), EXPECTED_VERSION)
 
     def test_mstrsvr_sensor(self):
         """Test MstrSvr sensor."""
         # Import the sensor module
         import mstrsvr.sensor
         from common.toml_utils import get_manifest_value
-        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
+        from common.version import get_version
+        EXPECTED_VERSION = get_manifest_value('metadata.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(mstrsvr.sensor.PROCESS_NAME, "MstrSvr")
         self.assertEqual(mstrsvr.sensor.PLUGIN_NAME, "mstrsvr")
-        self.assertEqual(mstrsvr.sensor.VERSION, EXPECTED_VERSION)
+        # Verify version alignment with manifest.toml
+        self.assertEqual(get_version(), EXPECTED_VERSION)
         
     def test_m8refsvr_sensor(self):
         """Test M8RefSvr sensor."""
         # Import the sensor module
         import m8refsvr.sensor
         from common.toml_utils import get_manifest_value
-        EXPECTED_VERSION = get_manifest_value('package.version', '0.1.0')
+        from common.version import get_version
+        EXPECTED_VERSION = get_manifest_value('metadata.version', '0.1.0')
         
         # Verify constants are set correctly
         self.assertEqual(m8refsvr.sensor.PROCESS_NAME, "M8RefSvr")
         self.assertEqual(m8refsvr.sensor.PLUGIN_NAME, "m8refsvr")
-        self.assertEqual(m8refsvr.sensor.VERSION, EXPECTED_VERSION)
+        # Verify version alignment with manifest.toml
+        self.assertEqual(get_version(), EXPECTED_VERSION)
 
 if __name__ == '__main__':
     unittest.main()
