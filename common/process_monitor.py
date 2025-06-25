@@ -214,8 +214,7 @@ def aggregate_process_metrics(process_map, parent_processes, process_name):
         "cpu_user_time_total": round(total_cpu_user_time, 2),
         "cpu_system_time_total": round(total_cpu_system_time, 2),
         "memory_rss_total": int(total_memory_rss),
-        "memory_vms_total": int(total_memory_vms),
-        "monitored_pids": ",".join(process_pids)             # For debugging
+        "memory_vms_total": int(total_memory_vms)
     }
     
     # Add thread statistics if available
