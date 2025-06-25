@@ -81,7 +81,7 @@ class TestSchemaMigration(unittest.TestCase):
         
         # Verify migration completed
         current_version = store._get_current_schema_version()
-        self.assertEqual(current_version, "1.0")
+        self.assertEqual(current_version, "2.0")
         
         # Verify legacy data is removed and new schema is in place using centralized connection
         with store._get_db_connection() as conn:
@@ -123,7 +123,7 @@ class TestSchemaMigration(unittest.TestCase):
         # Verify data is preserved
         service_info = store2.get_service_info(service_id)
         self.assertIsNotNone(service_info)
-        self.assertEqual(service_info['full_name'], "com.instana.plugin.python.test")
+        self.assertEqual(service_info['full_name'], "com_instana_plugin_python_test")
         
         metric_info = store2.get_metric_info(service_id, "test_metric")
         self.assertIsNotNone(metric_info)
@@ -135,7 +135,7 @@ class TestSchemaMigration(unittest.TestCase):
         
         # Test getting current version
         version = store._get_current_schema_version()
-        self.assertEqual(version, "1.0")
+        self.assertEqual(version, "2.0")
         
         # Test setting a new version
         store._set_schema_version("1.1")
@@ -147,7 +147,7 @@ class TestSchemaMigration(unittest.TestCase):
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM schema_version")
             count = cursor.fetchone()[0]
-            self.assertEqual(count, 2)  # Initial 1.0 + new 1.1
+            self.assertEqual(count, 2)  # Direct creation of 2.0 + new 1.1 set in this test
 
     def test_format_rules_initialization(self):
         """Test that default format rules are created during migration."""

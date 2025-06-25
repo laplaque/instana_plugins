@@ -18,18 +18,25 @@ class TestM8PrcSvrSensor(unittest.TestCase):
         """Test the sensor constants."""
         from m8prcsvr.sensor import PROCESS_NAME, PLUGIN_NAME
         from common.toml_utils import get_manifest_value
-        VERSION = get_manifest_value('package.version', '0.1.0')
-        EXPECTED_VERSION = VERSION
+        from common.version import get_version
         
+        # Verify basic constants
         self.assertEqual(PROCESS_NAME, "M8PrcSvr")
         self.assertEqual(PLUGIN_NAME, "m8prcsvr")
-        self.assertEqual(VERSION, EXPECTED_VERSION)
+        
+        # Verify version from manifest.toml
+        VERSION = get_version()
+        EXPECTED_VERSION = get_manifest_value('metadata.version', '0.1.0')
+        self.assertEqual(VERSION, EXPECTED_VERSION, 
+                         "VERSION should match the version specified in manifest.toml")
     
     @patch('common.base_sensor.run_sensor')
     def test_main_function(self, mock_run_sensor):
         """Test the main function."""
-        from m8prcsvr.sensor import PROCESS_NAME, PLUGIN_NAME, VERSION
-        
+        from m8prcsvr.sensor import PROCESS_NAME, PLUGIN_NAME
+        from common.toml_utils import get_manifest_value
+        VERSION = get_manifest_value('package.version', '0.1.0')
+
         # Import and run the main function
         import m8prcsvr.sensor
         if hasattr(m8prcsvr.sensor, '__name__') and m8prcsvr.sensor.__name__ == '__main__':

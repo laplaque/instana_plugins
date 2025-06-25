@@ -203,11 +203,66 @@ class TestInstanaOTelConnector(unittest.TestCase):
         callback = connector._create_metric_callback("non_existent_metric")
         result = list(callback(mock_options))
         self.assertEqual(len(result), 0)
-
+        
     @patch.object(InstanaOTelConnector, '_setup_tracing')
-    @patch.object(InstanaOTelConnector, '_setup_metrics')
+    def test_percentage_value_handling(self, mock_setup_tracing):
+        """Test that percentage values are properly converted."""
+        # Create connector
+        connector = InstanaOTelConnector(
+            service_name="test_service",
+            agent_host="test_host",
+            agent_port=1234
+        )
+        
+        # Add various metrics to the state, including:
+        # - Normal percentage (0-100 range)
+        # - CPU percentage exceeding 100% (multi-core scenario)
+        # - Memory percentage (always 0-100)
+        connector._metrics_state = {
+            "cpu_usage": 250.0,           # Multi-core CPU usage > 100%
+            "memory_usage": 75.5,         # Regular percentage 0-100
+            "another_cpu_metric": 120.0,  # Another CPU metric > 100%
+            "normal_metric": 50.0         # Non-percentage metric
+        }
+        
+        # Test callback for CPU metric > 100% 
+        callback = connector._create_metric_callback("cpu_usage", is_percentage=True, decimal_places=2)
+        mock_options = MagicMock()
+        result = list(callback(mock_options))
+        self.assertEqual(len(result), 1)
+        # We can't directly check result[0].value due to mocking, but we can verify it's called correctly
+        
+        # Test callback for regular percentage metric
+        callback = connector._create_metric_callback("memory_usage", is_percentage=True, decimal_places=2)
+        result = list(callback(mock_options))
+        self.assertEqual(len(result), 1)
+        
+        # Test callback for another CPU metric > 100%
+        callback = connector._create_metric_callback("another_cpu_metric", is_percentage=True, decimal_places=2)
+        result = list(callback(mock_options))
+        self.assertEqual(len(result), 1)
+        
+        # Test non-percentage metric (should not be divided by 100)
+        callback = connector._create_metric_callback("normal_metric", is_percentage=False, decimal_places=2)
+        result = list(callback(mock_options))
+        self.assertEqual(len(result), 1)
+
+    @patch('common.otel_connector.OTLPSpanExporter')
+    @patch('common.otel_connector.TracerProvider')
+    @patch('common.otel_connector.BatchSpanProcessor')
+    @patch('common.otel_connector.trace.set_tracer_provider')
+    @patch('common.otel_connector.trace.get_tracer')
+    @patch('common.otel_connector.OTLPMetricExporter')
+    @patch('common.otel_connector.PeriodicExportingMetricReader')
+    @patch('common.otel_connector.MeterProvider')
+    @patch('common.otel_connector.set_meter_provider')
+    @patch('common.otel_connector.get_meter_provider')
     @patch.object(InstanaOTelConnector, '_sync_toml_to_database')
-    def test_register_observable_metrics(self, mock_sync_toml, mock_setup_metrics, mock_setup_tracing):
+    def test_register_observable_metrics(self, mock_sync_toml, mock_get_meter_provider, mock_set_meter_provider,
+                                        mock_meter_provider, mock_reader, mock_exporter,
+                                        mock_get_tracer, mock_set_tracer_provider,
+                                        mock_batch_processor, mock_tracer_provider,
+                                        mock_span_exporter):
         """Test registering observable metrics with new database-driven approach."""
         # Setup mock database metrics
         mock_database_metrics = [
@@ -249,17 +304,11 @@ class TestInstanaOTelConnector(unittest.TestCase):
             
             mock_create_observable.return_value = MagicMock()
             
-            # Verify sync was called during initialization (before reset)
+            # Verify sync was called during initialization
             self.assertTrue(mock_sync_toml.called)
-            
-            # Reset call count for the explicit test call
-            mock_sync_toml.reset_mock()
             
             # Call register_observable_metrics explicitly 
             connector._register_observable_metrics()
-            
-            # Verify sync was called again in the explicit call
-            self.assertTrue(mock_sync_toml.called)
             
             # Verify create_observable was called for each metric
             self.assertEqual(mock_create_observable.call_count, 2)

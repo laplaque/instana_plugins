@@ -17,7 +17,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from common.process_monitor import (
     get_process_metrics, get_disk_io_for_pid, get_file_descriptor_count,
-    get_thread_count, get_context_switches, get_process_cpu_per_core
+    get_thread_count, get_context_switches
 )
 
 class TestProcessMonitor(unittest.TestCase):
@@ -37,8 +37,7 @@ class TestProcessMonitor(unittest.TestCase):
     @patch('common.process_monitor.get_file_descriptor_count')
     @patch('common.process_monitor.get_thread_count')
     @patch('common.process_monitor.get_context_switches')
-    @patch('common.process_monitor.get_process_cpu_per_core')
-    def test_get_process_metrics_success(self, mock_cpu_per_core, mock_ctx_switches,
+    def test_get_process_metrics_success(self, mock_ctx_switches,
                                        mock_thread_count, mock_fd_count, mock_disk_io, 
                                        mock_process_iter):
         """Test successful process metrics collection."""
@@ -59,7 +58,6 @@ class TestProcessMonitor(unittest.TestCase):
         mock_fd_count.return_value = 10
         mock_thread_count.return_value = 5
         mock_ctx_switches.return_value = (100, 50)
-        mock_cpu_per_core.return_value = {"cpu_core_0": 12.5, "cpu_core_1": 8.0}
         
         # Call the function
         result = get_process_metrics("TestProcess")
@@ -75,8 +73,6 @@ class TestProcessMonitor(unittest.TestCase):
         self.assertEqual(result["thread_count"], 5)
         self.assertEqual(result["voluntary_ctx_switches"], 100)
         self.assertEqual(result["nonvoluntary_ctx_switches"], 50)
-        self.assertEqual(result["cpu_core_0"], 12.5)
-        self.assertEqual(result["cpu_core_1"], 8.0)
         
         # Verify helper functions were called
         mock_disk_io.assert_called_once_with(self.mock_proc)
@@ -181,31 +177,6 @@ class TestProcessMonitor(unittest.TestCase):
         self.assertEqual(vol_ctx, 0)
         self.assertEqual(nonvol_ctx, 0)
 
-    @patch('common.process_monitor.psutil.cpu_percent')
-    def test_get_process_cpu_per_core_success(self, mock_cpu_percent):
-        """Test getting per-core CPU usage for a process."""
-        # Mock per-core CPU usage
-        mock_cpu_percent.return_value = [10.0, 20.0, 15.5, 5.2]
-        
-        result = get_process_cpu_per_core("1234")
-        
-        expected = {
-            "cpu_core_0": 10.0,
-            "cpu_core_1": 20.0,
-            "cpu_core_2": 15.5,
-            "cpu_core_3": 5.2
-        }
-        self.assertEqual(result, expected)
-        mock_cpu_percent.assert_called_once_with(percpu=True, interval=0.1)
-
-    @patch('common.process_monitor.psutil.cpu_percent')
-    def test_get_process_cpu_per_core_error(self, mock_cpu_percent):
-        """Test per-core CPU usage when psutil raises an exception."""
-        mock_cpu_percent.side_effect = Exception("CPU error")
-        
-        result = get_process_cpu_per_core("1234")
-        
-        self.assertEqual(result, {})
 
     @patch('common.process_monitor.psutil.process_iter')
     def test_empty_process_output(self, mock_process_iter):
@@ -240,14 +211,12 @@ class TestProcessMonitor(unittest.TestCase):
         with patch('common.process_monitor.get_disk_io_for_pid') as mock_disk_io, \
              patch('common.process_monitor.get_file_descriptor_count') as mock_fd_count, \
              patch('common.process_monitor.get_thread_count') as mock_thread_count, \
-             patch('common.process_monitor.get_context_switches') as mock_ctx_switches, \
-             patch('common.process_monitor.get_process_cpu_per_core') as mock_cpu_per_core:
+             patch('common.process_monitor.get_context_switches') as mock_ctx_switches:
             
             mock_disk_io.return_value = (0, 0)
             mock_fd_count.return_value = 0
             mock_thread_count.return_value = 1
             mock_ctx_switches.return_value = (0, 0)
-            mock_cpu_per_core.return_value = {}
             
             result = get_process_metrics("Test-Process")
             

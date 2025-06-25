@@ -97,7 +97,7 @@ class MetadataStore:
     
     def sanitize_for_metrics(self, input_string: str) -> str:
         """
-        Convert any string to safe technical identifier using only [a-z0-9_].
+        Convert any string to a safe technical identifier using only [a-z0-9_].
         
         This function sanitizes service names and metric names to ensure they
         are compatible with OpenTelemetry, databases, and monitoring systems.
@@ -114,17 +114,17 @@ class MetadataStore:
         # 1. Convert to lowercase
         result = input_string.lower()
         
-        # 2. Replace ANY non-alphanumeric character with underscore
-        result = re.sub(r'[^a-z0-9]', '_', result)
+        # 2. Replace invalid characters with underscore
+        result = re.sub(r'[^a-z0-9_]', '_', result)
         
-        # 3. Collapse multiple underscores into single underscore
+        # 3. Collapse multiple underscores into a single underscore
         result = re.sub(r'_+', '_', result)
         
         # 4. Remove leading/trailing underscores
         result = result.strip('_')
         
         # 5. Ensure it starts with a letter (prefix if needed)
-        if result and result[0].isdigit():
+        if result and not result[0].isalpha():
             result = 'metric_' + result
         
         # 6. Handle empty result
@@ -167,114 +167,180 @@ class MetadataStore:
         # Cache the metrics table schema after initialization
         self._cache_metrics_schema()
         
+    # ================================
+    # DATABASE INITIALIZATION
+    # ================================
+    
     def _init_db(self):
-        """Initialize the database schema and run migrations if needed."""
+        """Initialize the database schema using simplified logic."""
         try:
-            # Run schema migration first
-            self._run_migrations()
+            # Step 1: Determine if a schema is available
+            schema_exists = self._schema_exists()
+            
+            if schema_exists:
+                # Step 2: Determine the schema version if it is available
+                current_version = self._get_current_schema_version()
+                
+                if current_version == "1.0":
+                    # Step 3: If schema exists and it is version 1.0, migrate to version 2.0
+                    logger.info("Schema version 1.0 detected. Migrating to version 2.0")
+                    self._migrate_to_version_2_0()
+                elif current_version is None:
+                    # Step 4: If schema exists and has no version, drop and recreate
+                    logger.warning("Legacy schema with no version detected. Dropping database and creating version 2.0")
+                    self._drop_database()
+                    self._create_schema_version_2_0()
+                else:
+                    # Schema is already at target version or higher
+                    logger.debug(f"Schema is already at version {current_version}")
+            else:
+                # Step 5: If schema doesn't exist, create version 2.0
+                logger.info("No schema detected. Creating version 2.0")
+                self._create_schema_version_2_0()
+                
             logger.debug("Database schema initialized successfully")
             
         except sqlite3.Error as e:
             logger.error(f"Error initializing database: {e}")
             raise
     
-    def _get_db_connection(self):
+    def _schema_exists(self):
         """
-        Context manager for database connections.
-        
-        Provides consistent connection handling with automatic cleanup
-        and proper exception handling.
+        Check if any schema/tables exist in the database.
         
         Returns:
-            sqlite3.Connection: Database connection context manager
+            bool: True if tables exist, False otherwise
         """
-        return sqlite3.connect(self.db_path)
-    
-    def _cache_metrics_schema(self):
-        """
-        Cache the metrics table schema to avoid repeated PRAGMA calls.
-        This improves performance by eliminating database queries on every metric operation.
-        """
-        try:
-            with self._get_db_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Get metrics table schema once and cache it
-                cursor.execute("PRAGMA table_info(metrics)")
-                columns = [column[1] for column in cursor.fetchall()]
-                self.metrics_columns = set(columns)
-                
-            logger.debug(f"Cached metrics table schema: {len(self.metrics_columns)} columns")
+        # In-memory databases start empty
+        if self.db_path == ":memory:":
+            return False
             
-        except sqlite3.Error as e:
-            logger.error(f"Error caching metrics schema: {e}")
-            # Fall back to None, which will trigger the old behavior
-            self.metrics_columns = None
-    
-    def _get_current_schema_version(self) -> Optional[str]:
-        """
-        Get the current schema version from the database.
-        
-        Returns:
-            Current schema version or None if no version table exists
-        """
+        # For file databases, check if file exists and has tables
         try:
+            if not os.path.exists(self.db_path) or os.path.getsize(self.db_path) == 0:
+                return False
+                
             with self._get_db_connection() as conn:
                 cursor = conn.cursor()
-                
-                # Check if schema_version table exists
                 cursor.execute("""
                     SELECT name FROM sqlite_master 
-                    WHERE type='table' AND name='schema_version'
+                    WHERE type='table' AND name NOT LIKE 'sqlite_%'
                 """)
-                
-                if not cursor.fetchone():
-                    return None
-                    
-                # Get current version
-                cursor.execute("SELECT version FROM schema_version ORDER BY updated_date DESC LIMIT 1")
-                result = cursor.fetchone()
-                
-                return result[0] if result else None
-                
-        except sqlite3.Error as e:
-            logger.error(f"Error getting schema version: {e}")
-            return None
+                return len(cursor.fetchall()) > 0
+        except:
+            # If any error occurs, treat as no schema
+            return False
     
-    def _set_schema_version(self, version: str):
-        """
-        Set the current schema version in the database.
+    def _drop_database(self):
+        """Drop the existing database file to remove legacy schema."""
+        try:
+            if self.db_path != ":memory:" and os.path.exists(self.db_path):
+                os.remove(self.db_path)
+                logger.info("Legacy database file removed")
+        except OSError as e:
+            logger.error(f"Error removing database file: {e}")
+            raise
+    
+    def _create_schema_version_2_0(self):
+        """Create a new database with schema version 2.0."""
+        logger.info("Creating database with schema version 2.0")
         
-        Args:
-            version: Schema version to set
-        """
         try:
             with self._get_db_connection() as conn:
                 cursor = conn.cursor()
                 
-                # Create schema_version table if it doesn't exist
+                # Create hosts table
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS schema_version (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        version TEXT NOT NULL,
-                        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
+                CREATE TABLE hosts (
+                    id TEXT PRIMARY KEY,
+                    hostname TEXT UNIQUE,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP
+                )
                 """)
                 
-                # Insert new version record
-                now = datetime.now().isoformat()
+                # Create service_namespaces table
                 cursor.execute("""
-                    INSERT INTO schema_version (version, created_date, updated_date)
-                    VALUES (?, ?, ?)
-                """, (version, now, now))
+                CREATE TABLE service_namespaces (
+                    id TEXT PRIMARY KEY,
+                    namespace TEXT UNIQUE,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP
+                )
+                """)
+                
+                # Create services table
+                cursor.execute("""
+                CREATE TABLE services (
+                    id TEXT PRIMARY KEY,
+                    full_name TEXT UNIQUE,
+                    display_name TEXT,
+                    version TEXT,
+                    description TEXT,
+                    host_id TEXT,
+                    namespace_id TEXT,
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP,
+                    FOREIGN KEY (host_id) REFERENCES hosts(id),
+                    FOREIGN KEY (namespace_id) REFERENCES service_namespaces(id)
+                )
+                """)
+                
+                # Create metrics table with otel_type column included
+                cursor.execute("""
+                CREATE TABLE metrics (
+                    id TEXT PRIMARY KEY,
+                    service_id TEXT,
+                    name TEXT,
+                    display_name TEXT,
+                    unit TEXT,
+                    format_type TEXT,
+                    decimal_places INTEGER DEFAULT 2,
+                    is_percentage BOOLEAN DEFAULT 0,
+                    is_counter BOOLEAN DEFAULT 0,
+                    otel_type TEXT DEFAULT 'Gauge',
+                    first_seen TIMESTAMP,
+                    last_seen TIMESTAMP,
+                    FOREIGN KEY (service_id) REFERENCES services(id),
+                    UNIQUE(service_id, name)
+                )
+                """)
+                
+                # Create format rules table
+                cursor.execute("""
+                CREATE TABLE format_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pattern TEXT UNIQUE,
+                    replacement TEXT,
+                    rule_type TEXT,
+                    priority INTEGER
+                )
+                """)
+                
+                # Add default format rules
+                default_rules = [
+                    ("cpu", "CPU", "word_replacement", 100),
+                    ("_", " ", "character_replacement", 50),
+                    ("word_start", "capitalize", "word_formatting", 10)
+                ]
+                
+                for pattern, replacement, rule_type, priority in default_rules:
+                    cursor.execute("""
+                    INSERT INTO format_rules
+                    (pattern, replacement, rule_type, priority)
+                    VALUES (?, ?, ?, ?)
+                    """, (pattern, replacement, rule_type, priority))
                 
                 conn.commit()
-                logger.info(f"Set schema version to: {version}")
-                
+            
+            # Set schema version to 2.0
+            self._set_schema_version("2.0")
+            logger.info("Database created with schema version 2.0")
+            
         except sqlite3.Error as e:
-            logger.error(f"Error setting schema version: {e}")
+            logger.error(f"Error creating schema version 2.0: {e}")
             raise
+    
     
     def _migrate_to_version_1_0(self):
         """
@@ -456,9 +522,80 @@ class MetadataStore:
             logger.error(f"Error migrating to version 2.0: {e}")
             raise
     
+    # ================================
+    # SCHEMA VERSION MANAGEMENT
+    # ================================
+    
+    def _get_current_schema_version(self) -> Optional[str]:
+        """
+        Get the current schema version from the database.
+        
+        Returns:
+            Current schema version or None if no version table exists
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Check if schema_version table exists
+                cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name='schema_version'
+                """)
+                
+                if not cursor.fetchone():
+                    return None
+                    
+                # Get current version
+                cursor.execute("SELECT version FROM schema_version ORDER BY updated_date DESC LIMIT 1")
+                result = cursor.fetchone()
+                
+                return result[0] if result else None
+                
+        except sqlite3.Error as e:
+            logger.error(f"Error getting schema version: {e}")
+            return None
+    
+    def _set_schema_version(self, version: str):
+        """
+        Set the current schema version in the database.
+        
+        Args:
+            version: Schema version to set
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Create schema_version table if it doesn't exist
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS schema_version (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        version TEXT NOT NULL,
+                        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Insert new version record
+                now = datetime.now().isoformat()
+                cursor.execute("""
+                    INSERT INTO schema_version (version, created_date, updated_date)
+                    VALUES (?, ?, ?)
+                """, (version, now, now))
+                
+                conn.commit()
+                logger.info(f"Set schema version to: {version}")
+                
+        except sqlite3.Error as e:
+            logger.error(f"Error setting schema version: {e}")
+            raise
+    
     def _run_migrations(self):
         """
         Run database migrations to bring schema up to current version.
+        NOTE: This method is kept for backward compatibility but is no longer used
+        in the simplified schema creation logic.
         """
         current_version = self._get_current_schema_version()
         target_version = METADATA_SCHEMA_VERSION
@@ -489,7 +626,48 @@ class MetadataStore:
                 
         else:
             logger.debug(f"Schema is already at target version {target_version}")
+    
+    # ================================
+    # DATABASE CONNECTION MANAGEMENT
+    # ================================
+    
+    def _get_db_connection(self):
+        """
+        Context manager for database connections.
+        
+        Provides consistent connection handling with automatic cleanup
+        and proper exception handling.
+        
+        Returns:
+            sqlite3.Connection: Database connection context manager
+        """
+        return sqlite3.connect(self.db_path)
+    
+    def _cache_metrics_schema(self):
+        """
+        Cache the metrics table schema to avoid repeated PRAGMA calls.
+        This improves performance by eliminating database queries on every metric operation.
+        """
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Get metrics table schema once and cache it
+                cursor.execute("PRAGMA table_info(metrics)")
+                columns = [column[1] for column in cursor.fetchall()]
+                self.metrics_columns = set(columns)
+                
+            logger.debug(f"Cached metrics table schema: {len(self.metrics_columns)} columns")
             
+        except sqlite3.Error as e:
+            logger.error(f"Error caching metrics schema: {e}")
+            # Fall back to None, which will trigger the old behavior
+            self.metrics_columns = None
+    
+    # ================================
+    # CORE CRUD OPERATIONS
+    # ================================
+    
     def get_or_create_host(self, hostname: str) -> str:
         """
         Get existing host ID or create a new one if it doesn't exist.
@@ -1007,47 +1185,39 @@ class MetadataStore:
         Returns:
             Display name (e.g., Microstrategy M8mulprc)
         """
-        # Extract the part after "python."
-        match = re.search(r'\.python\.(.+)$', full_name)
-        if match:
-            base_name = match.group(1)
-        else:
-            # Fallback if pattern doesn't match
-            parts = full_name.split('.')
-            base_name = parts[-1] if parts else full_name
+        # Extract the part after the last dot
+        base_name = full_name.split('.')[-1]
             
         # Format the display name
         return self._format_metric_name(base_name)
         
     def _format_metric_name(self, name: str) -> str:
         """
-        Format a metric name according to the formatting rules.
+        Format a metric name for display.
         
         Args:
-            name: Raw metric name (e.g., cpu_usage)
+            name: Raw metric name (e.g., cpu_usage_total)
             
         Returns:
-            Formatted display name (e.g., CPU Usage)
+            Formatted display name (e.g., CPU Usage Total)
         """
-        # Special handling for CPU core metrics
-        cpu_core_match = re.match(r'cpu_core_(\d+)', name)
-        if cpu_core_match:
-            return f"CPU {cpu_core_match.group(1)}"
+        # Handle parameterized metrics
+        if '{' in name and '}' in name:
+            # For names like 'cpu_core_{index}', format the base name
+            base_name = name.split('{')[0].strip('_')
+            parameter = name[name.find('{'):]
+            return f"{self._format_metric_name(base_name)} {parameter}"
             
-        # Replace underscores with spaces
-        display_name = name.replace('_', ' ')
+        # General formatting rules
+        display_name = name.replace('_', ' ').replace('.', ' ')
         
-        # Replace "cpu" with "CPU" (case insensitive)
-        display_name = re.sub(r'\bcpu\b', 'CPU', display_name, flags=re.IGNORECASE)
-        
-        # Capitalize each word except for those already handled
+        # Capitalize words, handling acronyms like CPU
         words = display_name.split()
-        formatted_words = []
-        for word in words:
-            if word.upper() != 'CPU':  # Skip words that are already in special format
-                word = word.capitalize()
-            formatted_words.append(word)
-            
+        formatted_words = [
+            word.upper() if word.lower() == 'cpu' else word.capitalize()
+            for word in words
+        ]
+        
         return ' '.join(formatted_words)
         
     def get_simple_metric_name(self, full_metric_name: str) -> str:
@@ -1055,32 +1225,23 @@ class MetadataStore:
         Extract a simple, OpenTelemetry-compliant name from a fully qualified metric name.
         
         This function handles various metric naming conventions and returns names that
-        comply with OpenTelemetry requirements (ASCII, <=63 chars, no spaces).
+        comply with OpenTelemetry requirements.
         
         Args:
             full_metric_name: The fully qualified metric name
             
         Returns:
-            The simple metric name for OpenTelemetry registration (not display)
+            The simple metric name for OpenTelemetry registration
         """
         if not full_metric_name:
             return "unknown"
             
-        # First try splitting on '/'
-        parts = full_metric_name.split('/')
-        simple_name = parts[-1] if len(parts) > 1 else full_metric_name
-        
-        # If no '/' was found, try splitting on '.'
-        if simple_name == full_metric_name and '.' in full_metric_name:
-            parts = full_metric_name.split('.')
-            simple_name = parts[-1]
-        
-        # Remove any {} suffixes (for parameterized metrics)
-        simple_name = re.sub(r'\{.*\}$', '', simple_name)
-        
-        # Return the simple name without formatting for OpenTelemetry compliance
-        # (formatting is handled separately for display purposes)
-        return simple_name.strip()
+        # For parameterized metrics, return the name as is
+        if '{' in full_metric_name and '}' in full_metric_name:
+            return full_metric_name
+            
+        # For other metrics, sanitize to ensure compliance
+        return self.sanitize_for_metrics(full_metric_name)
     
     def sync_metric_from_toml(
         self,
