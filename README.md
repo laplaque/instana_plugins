@@ -250,9 +250,11 @@ The plugins use a common framework for process monitoring and OpenTelemetry inte
 
 The framework includes an automated metadata schema versioning system that ensures database compatibility:
 
-- **Automatic Migration**: Detects legacy databases and migrates them to current schema (v1.0)
+- **Automatic Migration**: Implements a simple and robust migration strategy.
+  - **Schema v1.0**: Automatically migrated to v2.0.
+  - **Legacy Databases**: (No version info) Dropped and recreated as v2.0.
 - **Version Tracking**: All schema changes are tracked with timestamps
-- **Data Safety**: Existing v1.0 data is preserved, legacy data is safely migrated with user warnings
+- **Data Safety**: Data from v1.0 schemas is preserved during migration. Data in legacy databases is not preserved.
 - **Future-Proofed**: Extensible design supports incremental schema versions
 
 The metadata database is automatically managed and requires no manual intervention.

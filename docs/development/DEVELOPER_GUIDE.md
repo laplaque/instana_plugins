@@ -221,14 +221,15 @@ The framework consists of two main layers:
 The framework includes a sophisticated metadata schema versioning system that automatically handles database migrations:
 
 #### Version Management
-- **Current Version**: Schema version 1.0 (defined in `common/__init__.py`)
+- **Current Version**: Schema version 2.0.
 - **Version Tracking**: `schema_version` table tracks all database migrations with timestamps
 - **Automatic Migration**: Detects legacy databases and migrates them automatically
 
 #### Migration Behavior
-- **New Installations**: Create fresh database with current schema (v1.0)
-- **Legacy Databases**: Detected automatically, previous metadata deleted with user warning, fresh v1.0 schema created
-- **Current Schema**: No migration needed, existing data fully preserved
+- **New Installations**: Create a fresh database with the current schema (v2.0).
+- **Schema 1.0**: Automatically migrated to version 2.0.
+- **Legacy Databases**: Detected automatically, the database is dropped and recreated with a fresh v2.0 schema.
+- **Current Schema (v2.0+)**: No migration needed, existing data is fully preserved.
 
 #### Database Location
 By default, metadata is stored in `~/.instana_plugins/metadata.db`. This location can be customized when initializing the MetadataStore.
